@@ -1,313 +1,201 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
-The Odds API Client
-https://the-odds-api.com/
-Prix: $10/mois pour 500 requêtes
+The Odds API Client - VERSION 2 JOURS
+Récupère les matchs d'AUJOURD'HUI et DEMAIN
 """
 
-import requests
-from datetime import datetime
 import os
+import requests
+from datetime import datetime, timedelta
 
 class OddsAPIClient:
-    """
-    Client pour récupérer les odds NBA en temps réel
-    
-    Plans:
-    - FREE: 500 requêtes/mois
-    - $10/mois: 5,000 requêtes/mois
-    """
-    
-    def __init__(self, api_key=None):
-        self.api_key = api_key or os.environ.get('ODDS_API_KEY')
-        self.base_url = "https://api.the-odds-api.com/v4"
-        
-        # Bookmakers à suivre (en ordre de préférence)
-        self.bookmakers = [
-            'fanduel',      # FanDuel
-            'draftkings',   # DraftKings  
-            'betmgm',       # BetMGM
-            'pointsbetus',  # PointsBet
-            'williamhill_us', # William Hill
-            'bovada',       # Bovada
-            'betonlineag'   # BetOnline (comparaison)
-        ]
-        
-    def get_nba_games(self):
-        """
-        Récupère les matchs NBA disponibles aujourd'hui
-        """
+    def __init__(self):
+        self.api_key = os.environ.get('ODDS_API_KEY')
         if not self.api_key:
-            print("⚠️ ODDS_API_KEY manquant - utilise mode simulation")
-            return self._simulate_games()
+            raise ValueError("ODDS_API_KEY not found in environment variables")
+        
+        self.base_url = 'https://api.the-odds-api.com/v4'
+        self.sport = 'basketball_nba'
+        
+    def get_player_props(self, days=2):
+        """
+        Récupère les player props pour X jours
+        
+        Args:
+            days (int): Nombre de jours (1 ou 2, max supporté par l'API gratuite)
+        
+        Returns:
+            list: Liste de toutes les props trouvées
+        """
+        all_props = []
+        
+        # Aujourd'hui
+        today_props = self._fetch_props_for_date(datetime.now())
+        all_props.extend(today_props)
+        
+        # Demain (si days >= 2)
+        if days >= 2:
+            tomorrow = datetime.now() + timedelta(days=1)
+            tomorrow_props = self._fetch_props_for_date(tomorrow)
+            all_props.extend(tomorrow_props)
+        
+        print(f"Total props retrieved: {len(all_props)} (over {days} day(s))")
+        
+        return all_props
+    
+    def _fetch_props_for_date(self, date):
+        """Récupère les props pour une date spécifique"""
+        
+        # Étape 1: Récupérer les matchs du jour
+        games_url = f'{self.base_url}/sports/{self.sport}/odds'
+        
+        params = {
+            'apiKey': self.api_key,
+            'regions': 'us',
+            'markets': 'h2h',
+            'oddsFormat': 'american',
+            'dateFormat': 'iso'
+        }
         
         try:
-            url = f"{self.base_url}/sports/basketball_nba/odds/"
+            response = requests.get(games_url, params=params, timeout=10)
+            response.raise_for_status()
+            games = response.json()
             
-            params = {
-                'apiKey': self.api_key,
-                'regions': 'us',
-                'markets': 'h2h,spreads,totals',
-                'oddsFormat': 'american',
-                'bookmakers': ','.join(self.bookmakers)
-            }
+            print(f"Games found for {date.strftime('%Y-%m-%d')}: {len(games)}")
             
-            response = requests.get(url, params=params, timeout=10)
+            if not games:
+                return []
             
-            if response.status_code != 200:
-                print(f"❌ Erreur API: {response.status_code}")
-                return self._simulate_games()
-            
-            data = response.json()
-            
-            # Affiche le nombre de requêtes restantes
-            remaining = response.headers.get('x-requests-remaining', 'N/A')
-            used = response.headers.get('x-requests-used', 'N/A')
-            print(f"📊 Requêtes: {used} utilisées, {remaining} restantes")
-            
-            return self._parse_games(data)
-            
-        except Exception as e:
-            print(f"❌ Erreur The Odds API: {e}")
-            return self._simulate_games()
-    
-    def _parse_games(self, data):
-        """Parse les données de l'API"""
-        games = []
+        except requests.exceptions.RequestException as e:
+            print(f"Error fetching games for {date.strftime('%Y-%m-%d')}: {e}")
+            return []
         
-        for game in data:
-            home_team = game['home_team']
-            away_team = game['away_team']
-            commence_time = game['commence_time']
+        # Étape 2: Récupérer les player props
+        props_url = f'{self.base_url}/sports/{self.sport}/events/{games[0]["id"]}/odds'
+        
+        params = {
+            'apiKey': self.api_key,
+            'regions': 'us',
+            'markets': 'player_points,player_rebounds,player_assists',
+            'oddsFormat': 'american'
+        }
+        
+        all_props = []
+        
+        for game in games:
+            event_id = game['id']
             
-            # Extrait les bookmakers
-            bookmakers_data = {}
-            
-            for bookmaker in game.get('bookmakers', []):
-                bm_name = bookmaker['key']
+            try:
+                props_response = requests.get(
+                    f'{self.base_url}/sports/{self.sport}/events/{event_id}/odds',
+                    params=params,
+                    timeout=10
+                )
+                props_response.raise_for_status()
+                event_data = props_response.json()
                 
-                for market in bookmaker.get('markets', []):
-                    if market['key'] == 'h2h':  # Moneyline
-                        bookmakers_data[bm_name] = {
-                            'home_odds': market['outcomes'][0]['price'],
-                            'away_odds': market['outcomes'][1]['price']
-                        }
-            
-            games.append({
-                'home_team': self._normalize_team(home_team),
-                'away_team': self._normalize_team(away_team),
-                'commence_time': commence_time,
-                'bookmakers': bookmakers_data
-            })
+                # Parse les props
+                props = self._parse_props(event_data, game, date)
+                all_props.extend(props)
+                
+            except requests.exceptions.RequestException as e:
+                print(f"Error fetching props for game {event_id}: {e}")
+                continue
         
-        return games
+        return all_props
     
-    def get_player_props(self):
-        """
-        Récupère les props de joueurs (points, assists, rebounds)
-        """
-        if not self.api_key:
-            return self._simulate_player_props()
-        
-        try:
-            url = f"{self.base_url}/sports/basketball_nba/odds/"
-            
-            params = {
-                'apiKey': self.api_key,
-                'regions': 'us',
-                'markets': 'player_points,player_assists,player_rebounds',
-                'oddsFormat': 'american',
-                'bookmakers': ','.join(self.bookmakers)
-            }
-            
-            response = requests.get(url, params=params, timeout=10)
-            
-            if response.status_code != 200:
-                return self._simulate_player_props()
-            
-            data = response.json()
-            return self._parse_player_props(data)
-            
-        except Exception as e:
-            print(f"❌ Erreur props: {e}")
-            return self._simulate_player_props()
-    
-    def _parse_player_props(self, data):
-        """Parse les props de joueurs"""
+    def _parse_props(self, event_data, game, date):
+        """Parse les props d'un événement"""
         props = []
         
-        for game in data:
-            home_team = self._normalize_team(game['home_team'])
-            away_team = self._normalize_team(game['away_team'])
+        home_team = game['home_team']
+        away_team = game['away_team']
+        game_time = game.get('commence_time', '')
+        
+        if 'bookmakers' not in event_data:
+            return props
+        
+        for bookmaker in event_data['bookmakers']:
+            bookmaker_name = bookmaker['key']
             
-            for bookmaker in game.get('bookmakers', []):
-                bm_name = bookmaker['key']
+            for market in bookmaker.get('markets', []):
+                market_type = market['key']
                 
-                for market in bookmaker.get('markets', []):
-                    market_type = market['key']  # player_points, player_assists, etc.
-                    
-                    # Mapping
-                    stat_mapping = {
-                        'player_points': 'points',
-                        'player_assists': 'assists', 
-                        'player_rebounds': 'rebounds'
-                    }
-                    
-                    stat_type = stat_mapping.get(market_type)
-                    if not stat_type:
-                        continue
-                    
-                    for outcome in market.get('outcomes', []):
-                        player_name = outcome.get('description', '')
-                        point = outcome.get('point')  # La ligne (ex: 25.5)
-                        
-                        # Over/Under
-                        over_odds = None
-                        under_odds = None
-                        
-                        if outcome['name'] == 'Over':
-                            over_odds = outcome['price']
-                        elif outcome['name'] == 'Under':
-                            under_odds = outcome['price']
-                        
-                        if player_name and point:
-                            props.append({
-                                'player': player_name,
-                                'stat_type': stat_type,
-                                'line': float(point),
-                                'over_odds': over_odds,
-                                'under_odds': under_odds,
-                                'bookmaker': bm_name,
-                                'home_team': home_team,
-                                'away_team': away_team
-                            })
+                # Mapper les markets vers nos stat_types
+                stat_type_map = {
+                    'player_points': 'points',
+                    'player_rebounds': 'rebounds',
+                    'player_assists': 'assists'
+                }
+                
+                stat_type = stat_type_map.get(market_type)
+                if not stat_type:
+                    continue
+                
+                for outcome in market.get('outcomes', []):
+                    props.append({
+                        'player': outcome['description'],
+                        'stat_type': stat_type,
+                        'line': outcome['point'],
+                        'over_odds': outcome.get('price', -110),
+                        'under_odds': -110,  # Approximation
+                        'bookmaker': bookmaker_name,
+                        'home_team': home_team,
+                        'away_team': away_team,
+                        'game_time': game_time,
+                        'date': date.strftime('%Y-%m-%d')
+                    })
         
         return props
     
-    def _normalize_team(self, team_name):
-        """Normalise les noms d'équipes"""
-        team_map = {
-            'Los Angeles Lakers': 'LAL',
-            'Golden State Warriors': 'GSW',
-            'Boston Celtics': 'BOS',
-            'Miami Heat': 'MIA',
-            'Milwaukee Bucks': 'MIL',
-            'Phoenix Suns': 'PHX',
-            'Dallas Mavericks': 'DAL',
-            'Denver Nuggets': 'DEN',
-            'Los Angeles Clippers': 'LAC',
-            'Philadelphia 76ers': 'PHI',
-            'Brooklyn Nets': 'BKN',
-            'Atlanta Hawks': 'ATL',
-            'Chicago Bulls': 'CHI',
-            'Cleveland Cavaliers': 'CLE',
-            'Detroit Pistons': 'DET',
-            'Houston Rockets': 'HOU',
-            'Indiana Pacers': 'IND',
-            'Memphis Grizzlies': 'MEM',
-            'Minnesota Timberwolves': 'MIN',
-            'New Orleans Pelicans': 'NOP',
-            'New York Knicks': 'NYK',
-            'Oklahoma City Thunder': 'OKC',
-            'Orlando Magic': 'ORL',
-            'Portland Trail Blazers': 'POR',
-            'Sacramento Kings': 'SAC',
-            'San Antonio Spurs': 'SAS',
-            'Toronto Raptors': 'TOR',
-            'Utah Jazz': 'UTA',
-            'Washington Wizards': 'WAS',
-            'Charlotte Hornets': 'CHA'
-        }
-        return team_map.get(team_name, team_name)
-    
-    def _simulate_games(self):
-        """Simule des matchs pour testing"""
-        return [
-            {
-                'home_team': 'LAL',
-                'away_team': 'GSW',
-                'commence_time': datetime.now().isoformat(),
-                'bookmakers': {
-                    'fanduel': {'home_odds': -150, 'away_odds': 130},
-                    'draftkings': {'home_odds': -145, 'away_odds': 125}
-                }
-            }
-        ]
-    
-    def _simulate_player_props(self):
-        """Simule des props pour testing"""
-        return [
-            {
-                'player': 'LeBron James',
-                'stat_type': 'points',
-                'line': 25.5,
-                'over_odds': -110,
-                'under_odds': -110,
-                'bookmaker': 'fanduel',
-                'home_team': 'LAL',
-                'away_team': 'GSW'
-            },
-            {
-                'player': 'Stephen Curry',
-                'stat_type': 'points',
-                'line': 27.5,
-                'over_odds': -115,
-                'under_odds': -105,
-                'bookmaker': 'draftkings',
-                'home_team': 'GSW',
-                'away_team': 'LAL'
-            },
-            {
-                'player': 'LeBron James',
-                'stat_type': 'assists',
-                'line': 7.5,
-                'over_odds': -110,
-                'under_odds': -110,
-                'bookmaker': 'fanduel',
-                'home_team': 'LAL',
-                'away_team': 'GSW'
-            }
-        ]
-    
     def get_usage_stats(self):
-        """Récupère les stats d'utilisation de l'API"""
-        if not self.api_key:
-            return {'status': 'API key manquant', 'used': 0, 'remaining': 500}
+        """Vérifie l'utilisation de l'API"""
+        url = f'{self.base_url}/sports/{self.sport}/odds'
+        
+        params = {
+            'apiKey': self.api_key,
+            'regions': 'us'
+        }
         
         try:
-            # Fait une petite requête pour récupérer les headers
-            url = f"{self.base_url}/sports/basketball_nba/odds/"
-            params = {
-                'apiKey': self.api_key,
-                'regions': 'us'
-            }
-            response = requests.get(url, params=params, timeout=5)
+            response = requests.get(url, params=params, timeout=10)
+            
+            # Les headers contiennent l'info d'usage
+            requests_used = response.headers.get('X-Requests-Used', 'unknown')
+            requests_remaining = response.headers.get('X-Requests-Remaining', 'unknown')
             
             return {
-                'status': 'ok',
-                'used': response.headers.get('x-requests-used', 'N/A'),
-                'remaining': response.headers.get('x-requests-remaining', 'N/A')
+                'used': requests_used,
+                'remaining': requests_remaining,
+                'total': 500  # Plan gratuit
             }
         except Exception as e:
-            return {'status': 'error', 'message': str(e)}
+            return {'error': str(e)}
 
 
+# Test si exécuté directement
 if __name__ == '__main__':
-    print("🎲 Test The Odds API Client")
-    print("=" * 60)
-    
     client = OddsAPIClient()
     
-    print("\n📊 Matchs NBA disponibles:")
-    games = client.get_nba_games()
-    for game in games[:3]:
-        print(f"   {game['away_team']} @ {game['home_team']}")
+    print("\n=== TEST: Récupération props 2 jours ===\n")
     
-    print(f"\n🎯 Props disponibles:")
-    props = client.get_player_props()
-    for prop in props[:5]:
-        print(f"   {prop['player']}: {prop['stat_type']} O/U {prop['line']}")
+    props = client.get_player_props(days=2)
     
-    print("\n📈 Usage API:")
-    stats = client.get_usage_stats()
-    print(f"   {stats}")
+    print(f"\nTotal props: {len(props)}")
+    
+    if props:
+        print("\nExemple de prop:")
+        print(f"  Joueur: {props[0]['player']}")
+        print(f"  Stat: {props[0]['stat_type']}")
+        print(f"  Ligne: {props[0]['line']}")
+        print(f"  Date: {props[0]['date']}")
+        print(f"  Match: {props[0]['away_team']} @ {props[0]['home_team']}")
+        print(f"  Heure: {props[0]['game_time']}")
+    
+    print("\n=== Utilisation API ===\n")
+    usage = client.get_usage_stats()
+    print(f"Utilisées: {usage.get('used')}")
+    print(f"Restantes: {usage.get('remaining')}")
+
