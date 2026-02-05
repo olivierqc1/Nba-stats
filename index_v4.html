@@ -1,1 +1,864 @@
-test
+<!DOCTYPE html>
+<html lang="fr">
+<!-- 
+╔═══════════════════════════════════════════════════════════════╗
+║  INDEX_V4.HTML - PART 1/3                                     ║
+║                                                               ║
+║  📋 INSTRUCTIONS:                                             ║
+║  1. Copie TOUT ce fichier (Ctrl+A puis Ctrl+C)               ║
+║  2. Colle dans un nouveau fichier: index_v4.html              ║
+║  3. NE SAUVEGARDE PAS encore!                                 ║
+║  4. Continue avec INDEX_PART2.html                            ║
+╚═══════════════════════════════════════════════════════════════╝
+-->
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NBA Betting Analyzer v4</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            text-align: center;
+        }
+
+        .header h1 {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .header p {
+            color: #666;
+            font-size: 1.1em;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .tab-btn {
+            flex: 1;
+            padding: 15px;
+            background: white;
+            border: none;
+            border-radius: 12px;
+            font-weight: 600;
+            font-size: 1.1em;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        .tab-btn.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            transform: translateY(-2px);
+            box-shadow: 0 6px 12px rgba(102,126,234,0.4);
+        }
+
+        .tab-content {
+            display: none;
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .form-section {
+            background: #f8f9fa;
+            padding: 25px;
+            border-radius: 15px;
+            margin-bottom: 25px;
+        }
+
+        .form-section h3 {
+            color: #667eea;
+            margin-bottom: 20px;
+            font-size: 1.3em;
+        }
+
+        .form-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
+
+        .form-group label {
+            font-weight: 600;
+            margin-bottom: 8px;
+            color: #333;
+            font-size: 0.95em;
+        }
+
+        .form-group input,
+        .form-group select {
+            padding: 12px 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 1em;
+            transition: all 0.3s;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102,126,234,0.1);
+        }
+
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 15px 0;
+        }
+
+        .checkbox-group input[type="checkbox"] {
+            width: 20px;
+            height: 20px;
+            cursor: pointer;
+        }
+
+        .checkbox-group label {
+            cursor: pointer;
+            font-weight: 500;
+        }
+
+        .analyze-btn {
+            width: 100%;
+            padding: 18px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 1.2em;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 4px 15px rgba(102,126,234,0.4);
+        }
+
+        .analyze-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(102,126,234,0.6);
+        }
+
+        .analyze-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .results {
+            margin-top: 30px;
+        }
+
+        .prediction-box {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 15px;
+            margin-bottom: 25px;
+            text-align: center;
+        }
+
+        .prediction-box h2 {
+            font-size: 1.4em;
+            margin-bottom: 15px;
+            opacity: 0.9;
+        }
+
+        .prediction-value {
+            font-size: 4em;
+            font-weight: 800;
+            margin: 10px 0;
+        }
+
+        .confidence-interval {
+            font-size: 1.1em;
+            opacity: 0.9;
+            margin-top: 10px;
+        }
+
+        .recommendation-box {
+            background: #f8f9fa;
+            padding: 25px;
+            border-radius: 15px;
+            margin-bottom: 20px;
+        }
+
+        .recommendation-box h3 {
+            color: #333;
+            margin-bottom: 15px;
+        }
+
+        .recommendation {
+            display: inline-block;
+            padding: 15px 30px;
+            border-radius: 10px;
+            font-size: 1.5em;
+            font-weight: 700;
+            margin: 10px 0;
+        }
+
+        .recommendation.over {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .recommendation.under {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .recommendation.skip {
+            background: #e5e7eb;
+            color: #374151;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .stat-card {
+            background: white;
+            padding: 20px;
+            border-radius: 12px;
+            border-left: 4px solid #667eea;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+
+        .stat-label {
+            color: #666;
+            font-size: 0.9em;
+            margin-bottom: 5px;
+        }
+
+        .stat-value {
+            font-size: 1.8em;
+            font-weight: 700;
+            color: #333;
+        }
+
+        .info-box {
+            background: #e0f2fe;
+            border: 2px solid #0ea5e9;
+            padding: 20px;
+            border-radius: 12px;
+            margin: 15px 0;
+        }
+
+        .info-box h4 {
+            color: #0369a1;
+            margin-bottom: 10px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+        }
+
+        .spinner {
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid #667eea;
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        .error {
+            background: #fee2e2;
+            border: 3px solid #fca5a5;
+            color: #991b1b;
+            padding: 25px;
+            border-radius: 15px;
+            text-align: center;
+            margin: 20px 0;
+        }
+    </style>
+</head>
+
+<!-- ╔═══════════════════════════════════════════════════════════════╗ -->
+<!-- ║                    FIN PART 1/3                               ║ -->
+<!-- ║  ⚠️  OUVRE INDEX_PART2.html et COPIE TOUT EN DESSOUS          ║ -->
+<!-- ╚═══════════════════════════════════════════════════════════════╝ -->
+
+<!-- 
+╔═══════════════════════════════════════════════════════════════╗
+║  INDEX_V4.HTML - PART 2/3                                     ║
+║                                                               ║
+║  📋 COPIE TOUT CE FICHIER ET COLLE-LE EN DESSOUS DE PART1     ║
+╚═══════════════════════════════════════════════════════════════╝
+-->
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🏀 NBA Betting Analyzer</h1>
+            <p>Analyse Points, Assists & Rebounds avec Chi², Outliers et Régression</p>
+        </div>
+
+        <!-- TABS -->
+        <div class="tabs">
+            <button class="tab-btn active" onclick="switchTab('points')">📊 Points</button>
+            <button class="tab-btn" onclick="switchTab('assists')">🎯 Assists</button>
+            <button class="tab-btn" onclick="switchTab('rebounds')">🏆 Rebounds</button>
+        </div>
+
+        <!-- POINTS TAB -->
+        <div id="points-tab" class="tab-content active">
+            <div class="form-section">
+                <h3>🎯 Sélection Joueur</h3>
+                
+                <div class="form-grid">
+                    <!-- Sélection Équipe -->
+                    <div class="form-group">
+                        <label for="points-team">Équipe:</label>
+                        <select id="points-team" onchange="loadTeamRoster('points')">
+                            <option value="">-- Choisir une équipe --</option>
+                        </select>
+                    </div>
+
+                    <!-- Sélection Joueur -->
+                    <div class="form-group">
+                        <label for="points-player">Joueur:</label>
+                        <select id="points-player" disabled>
+                            <option value="">-- Choisir d'abord l'équipe --</option>
+                        </select>
+                    </div>
+
+                    <!-- Adversaire -->
+                    <div class="form-group">
+                        <label for="points-opponent">Adversaire:</label>
+                        <select id="points-opponent">
+                            <option value="">-- Choisir adversaire --</option>
+                        </select>
+                    </div>
+
+                    <!-- Domicile/Extérieur -->
+                    <div class="form-group">
+                        <label for="points-location">Lieu:</label>
+                        <select id="points-location">
+                            <option value="home">Domicile</option>
+                            <option value="away">Extérieur</option>
+                        </select>
+                    </div>
+
+                    <!-- Ligne bookmaker -->
+                    <div class="form-group">
+                        <label for="points-line">Ligne Bookmaker (O/U):</label>
+                        <input type="number" id="points-line" step="0.5" placeholder="Ex: 25.5">
+                    </div>
+                </div>
+
+                <div class="checkbox-group">
+                    <input type="checkbox" id="points-outliers" checked>
+                    <label for="points-outliers">Exclure les données extrêmes (outliers)</label>
+                </div>
+
+                <button class="analyze-btn" onclick="analyzePlayer('points')">
+                    📊 Analyser Points
+                </button>
+            </div>
+
+            <div id="points-loading" class="loading hidden">
+                <div class="spinner"></div>
+                <p>Analyse en cours...</p>
+            </div>
+
+            <div id="points-results" class="results hidden"></div>
+            <div id="points-error" class="error hidden"></div>
+        </div>
+
+        <!-- ASSISTS TAB -->
+        <div id="assists-tab" class="tab-content">
+            <div class="form-section">
+                <h3>🎯 Sélection Joueur</h3>
+                
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="assists-team">Équipe:</label>
+                        <select id="assists-team" onchange="loadTeamRoster('assists')">
+                            <option value="">-- Choisir une équipe --</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="assists-player">Joueur:</label>
+                        <select id="assists-player" disabled>
+                            <option value="">-- Choisir d'abord l'équipe --</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="assists-opponent">Adversaire:</label>
+                        <select id="assists-opponent">
+                            <option value="">-- Choisir adversaire --</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="assists-location">Lieu:</label>
+                        <select id="assists-location">
+                            <option value="home">Domicile</option>
+                            <option value="away">Extérieur</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="assists-line">Ligne Bookmaker (O/U):</label>
+                        <input type="number" id="assists-line" step="0.5" placeholder="Ex: 7.5">
+                    </div>
+                </div>
+
+                <div class="checkbox-group">
+                    <input type="checkbox" id="assists-outliers" checked>
+                    <label for="assists-outliers">Exclure les données extrêmes (outliers)</label>
+                </div>
+
+                <button class="analyze-btn" onclick="analyzePlayer('assists')">
+                    🎯 Analyser Assists
+                </button>
+            </div>
+
+            <div id="assists-loading" class="loading hidden">
+                <div class="spinner"></div>
+                <p>Analyse en cours...</p>
+            </div>
+
+            <div id="assists-results" class="results hidden"></div>
+            <div id="assists-error" class="error hidden"></div>
+        </div>
+
+        <!-- REBOUNDS TAB -->
+        <div id="rebounds-tab" class="tab-content">
+            <div class="form-section">
+                <h3>🎯 Sélection Joueur</h3>
+                
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label for="rebounds-team">Équipe:</label>
+                        <select id="rebounds-team" onchange="loadTeamRoster('rebounds')">
+                            <option value="">-- Choisir une équipe --</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="rebounds-player">Joueur:</label>
+                        <select id="rebounds-player" disabled>
+                            <option value="">-- Choisir d'abord l'équipe --</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="rebounds-opponent">Adversaire:</label>
+                        <select id="rebounds-opponent">
+                            <option value="">-- Choisir adversaire --</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="rebounds-location">Lieu:</label>
+                        <select id="rebounds-location">
+                            <option value="home">Domicile</option>
+                            <option value="away">Extérieur</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="rebounds-line">Ligne Bookmaker (O/U):</label>
+                        <input type="number" id="rebounds-line" step="0.5" placeholder="Ex: 8.5">
+                    </div>
+                </div>
+
+                <div class="checkbox-group">
+                    <input type="checkbox" id="rebounds-outliers" checked>
+                    <label for="rebounds-outliers">Exclure les données extrêmes (outliers)</label>
+                </div>
+
+                <button class="analyze-btn" onclick="analyzePlayer('rebounds')">
+                    🏆 Analyser Rebounds
+                </button>
+            </div>
+
+            <div id="rebounds-loading" class="loading hidden">
+                <div class="spinner"></div>
+                <p>Analyse en cours...</p>
+            </div>
+
+            <div id="rebounds-results" class="results hidden"></div>
+            <div id="rebounds-error" class="error hidden"></div>
+        </div>
+    </div>
+
+<!-- ╔═══════════════════════════════════════════════════════════════╗ -->
+<!-- ║                    FIN PART 2/3                               ║ -->
+<!-- ║  ⚠️  OUVRE INDEX_PART3.html et COPIE TOUT EN DESSOUS          ║ -->
+<!-- ╚═══════════════════════════════════════════════════════════════╝ -->
+
+
+<!-- 
+╔═══════════════════════════════════════════════════════════════╗
+║  INDEX_V4.HTML - PART 3/3                                     ║
+║                                                               ║
+║  📋 COPIE TOUT CE FICHIER ET COLLE-LE EN DESSOUS DE PART2     ║
+║  📋 PUIS SAUVEGARDE LE FICHIER!                               ║
+╚═══════════════════════════════════════════════════════════════╝
+-->
+    <script>
+        const API_URL = 'https://nba-betting-1.onrender.com';
+
+        // Switch entre tabs
+        function switchTab(stat) {
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            
+            event.target.classList.add('active');
+            document.getElementById(`${stat}-tab`).classList.add('active');
+        }
+
+        // Charge les équipes au démarrage
+        async function loadTeams() {
+            try {
+                const response = await fetch(`${API_URL}/api/teams`);
+                const data = await response.json();
+                
+                if (data.status === 'SUCCESS') {
+                    const teams = data.teams;
+                    
+                    ['points', 'assists', 'rebounds'].forEach(stat => {
+                        const teamSelect = document.getElementById(`${stat}-team`);
+                        const opponentSelect = document.getElementById(`${stat}-opponent`);
+                        
+                        teams.forEach(team => {
+                            const option1 = document.createElement('option');
+                            option1.value = team.code;
+                            option1.textContent = team.code;
+                            teamSelect.appendChild(option1);
+                            
+                            const option2 = document.createElement('option');
+                            option2.value = team.code;
+                            option2.textContent = team.code;
+                            opponentSelect.appendChild(option2);
+                        });
+                    });
+                }
+            } catch (error) {
+                console.error('Erreur chargement équipes:', error);
+            }
+        }
+
+        // Charge le roster d'une équipe
+        async function loadTeamRoster(stat) {
+            const teamCode = document.getElementById(`${stat}-team`).value;
+            const playerSelect = document.getElementById(`${stat}-player`);
+            
+            if (!teamCode) {
+                playerSelect.disabled = true;
+                playerSelect.innerHTML = '<option value="">-- Choisir d\'abord l\'équipe --</option>';
+                return;
+            }
+            
+            try {
+                const response = await fetch(`${API_URL}/api/team-roster/${teamCode}`);
+                const data = await response.json();
+                
+                if (data.status === 'SUCCESS') {
+                    playerSelect.disabled = false;
+                    playerSelect.innerHTML = '<option value="">-- Choisir un joueur --</option>';
+                    
+                    data.roster.forEach(player => {
+                        const option = document.createElement('option');
+                        option.value = player.name;
+                        option.textContent = player.name;
+                        playerSelect.appendChild(option);
+                    });
+                }
+            } catch (error) {
+                console.error('Erreur chargement roster:', error);
+                playerSelect.innerHTML = '<option value="">Erreur chargement</option>';
+            }
+        }
+
+        // Analyse un joueur
+        async function analyzePlayer(stat) {
+            const player = document.getElementById(`${stat}-player`).value;
+            const opponent = document.getElementById(`${stat}-opponent`).value;
+            const location = document.getElementById(`${stat}-location`).value;
+            const line = document.getElementById(`${stat}-line`).value;
+            const removeOutliers = document.getElementById(`${stat}-outliers`).checked;
+
+            if (!player || !opponent) {
+                alert('Veuillez sélectionner un joueur et un adversaire');
+                return;
+            }
+
+            const loadingDiv = document.getElementById(`${stat}-loading`);
+            const resultsDiv = document.getElementById(`${stat}-results`);
+            const errorDiv = document.getElementById(`${stat}-error`);
+
+            loadingDiv.classList.remove('hidden');
+            resultsDiv.classList.add('hidden');
+            errorDiv.classList.add('hidden');
+
+            try {
+                const response = await fetch(`${API_URL}/api/analyze`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        player: player,
+                        stat_type: stat,
+                        opponent: opponent,
+                        is_home: location === 'home',
+                        line: line ? parseFloat(line) : null,
+                        remove_outliers: removeOutliers
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.error) {
+                    throw new Error(data.error);
+                }
+
+                displayResults(data, stat);
+
+            } catch (error) {
+                errorDiv.textContent = `❌ Erreur: ${error.message}`;
+                errorDiv.classList.remove('hidden');
+            } finally {
+                loadingDiv.classList.add('hidden');
+            }
+        }
+
+        // Affiche les résultats
+        function displayResults(data, stat) {
+            const resultsDiv = document.getElementById(`${stat}-results`);
+            
+            const statLabel = {
+                'points': 'Points',
+                'assists': 'Assists',
+                'rebounds': 'Rebounds'
+            }[stat];
+
+            const recClass = data.line_analysis.recommendation.toLowerCase();
+
+            resultsDiv.innerHTML = `
+                <!-- Prédiction -->
+                <div class="prediction-box">
+                    <h2>Prédiction: ${statLabel}</h2>
+                    <div class="prediction-value">${data.prediction}</div>
+                    <div class="confidence-interval">
+                        IC 95%: [${data.confidence_interval.lower} - ${data.confidence_interval.upper}]
+                    </div>
+                    <p style="margin-top: 15px; opacity: 0.9;">
+                        Source: ${data.data_source}
+                    </p>
+                </div>
+
+                <!-- Recommandation -->
+                <div class="recommendation-box">
+                    <h3>💡 Recommandation</h3>
+                    <div class="recommendation ${recClass}">
+                        ${data.line_analysis.recommendation} ${data.line_analysis.bookmaker_line}
+                    </div>
+                    <div class="stats-grid" style="margin-top: 20px;">
+                        <div class="stat-card">
+                            <div class="stat-label">Probabilité OVER</div>
+                            <div class="stat-value">${data.line_analysis.over_probability}%</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Probabilité UNDER</div>
+                            <div class="stat-value">${data.line_analysis.under_probability}%</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Edge</div>
+                            <div class="stat-value">${data.line_analysis.edge > 0 ? '+' : ''}${data.line_analysis.edge}%</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Kelly Criterion</div>
+                            <div class="stat-value">${data.line_analysis.kelly_criterion}%</div>
+                        </div>
+                    </div>
+                    <p style="margin-top: 15px; text-align: center; font-weight: 600;">
+                        Confiance: ${data.line_analysis.bet_confidence}
+                    </p>
+                </div>
+
+                <!-- Stats Saison -->
+                <div class="info-box">
+                    <h4>📊 Statistiques Saison</h4>
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-label">Matchs Joués</div>
+                            <div class="stat-value">${data.season_stats.games_played}</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Matchs Utilisés</div>
+                            <div class="stat-value">${data.season_stats.games_used}</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Moyenne</div>
+                            <div class="stat-value">${data.season_stats.weighted_avg}</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Écart-type (σ)</div>
+                            <div class="stat-value">${data.season_stats.std_dev}</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Min</div>
+                            <div class="stat-value">${data.season_stats.min}</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">Max</div>
+                            <div class="stat-value">${data.season_stats.max}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Chi-carré -->
+                <div class="info-box" style="background: ${data.chi_square_test.significant ? '#fee2e2' : '#dbeafe'}; border-color: ${data.chi_square_test.significant ? '#ef4444' : '#3b82f6'};">
+                    <h4 style="color: ${data.chi_square_test.significant ? '#991b1b' : '#1e40af'};">
+                        📈 Test du Chi-carré (χ²)
+                    </h4>
+                    <p><strong>χ² =</strong> ${data.chi_square_test.chi2_statistic.toFixed(3)}</p>
+                    <p><strong>p-value =</strong> ${data.chi_square_test.p_value.toFixed(4)}</p>
+                    <p><strong>DDL =</strong> ${data.chi_square_test.dof}</p>
+                    <p style="margin-top: 10px; font-weight: 600;">
+                        ${data.chi_square_test.interpretation}
+                    </p>
+                </div>
+
+                <!-- Outliers -->
+                <div class="info-box">
+                    <h4>🔍 Analyse des Outliers</h4>
+                    <p><strong>Méthode:</strong> ${data.outlier_analysis.method}</p>
+                    <p><strong>Détectés:</strong> ${data.outlier_analysis.outliers_detected} (${data.outlier_analysis.outliers_pct}%)</p>
+                    <p><strong>Données:</strong> ${data.outlier_analysis.data_used}</p>
+                    <p style="margin-top: 10px; font-style: italic;">
+                        ${data.outlier_analysis.recommendation}
+                    </p>
+                    ${data.outlier_analysis.outliers.length > 0 ? `
+                        <details style="margin-top: 15px;">
+                            <summary style="cursor: pointer; font-weight: 600;">Voir les outliers (${data.outlier_analysis.outliers.length})</summary>
+                            <ul style="margin-top: 10px; list-style: none; padding: 0;">
+                                ${data.outlier_analysis.outliers.map(o => `
+                                    <li style="padding: 8px; margin: 5px 0; background: white; border-radius: 6px;">
+                                        ${o.date} vs ${o.opponent}: <strong>${o[stat]}</strong> (${o.reason})
+                                    </li>
+                                `).join('')}
+                            </ul>
+                        </details>
+                    ` : ''}
+                </div>
+
+                <!-- Régression -->
+                <div class="info-box">
+                    <h4>📈 Statistiques de Régression</h4>
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-label">R²</div>
+                            <div class="stat-value">${data.regression_stats.r_squared}</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">R² ajusté</div>
+                            <div class="stat-value">${data.regression_stats.adjusted_r_squared}</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">RMSE</div>
+                            <div class="stat-value">${data.regression_stats.rmse}</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-label">DDL</div>
+                            <div class="stat-value">${data.regression_stats.dof}</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Splits -->
+                ${data.splits.home || data.splits.away ? `
+                <div class="info-box">
+                    <h4>📊 Splits Domicile/Extérieur</h4>
+                    ${data.splits.home ? `<p><strong>Domicile:</strong> ${data.splits.home.avg} (${data.splits.home.games} matchs)</p>` : ''}
+                    ${data.splits.away ? `<p><strong>Extérieur:</strong> ${data.splits.away.avg} (${data.splits.away.games} matchs)</p>` : ''}
+                    ${data.splits.vs_opponent ? `<p><strong>vs ${data.opponent}:</strong> ${data.splits.vs_opponent.avg} (${data.splits.vs_opponent.games} matchs)</p>` : ''}
+                </div>
+                ` : ''}
+
+                <!-- Tendance -->
+                <div class="info-box">
+                    <h4>📈 Analyse de Tendance</h4>
+                    <p><strong>Pente:</strong> ${data.trend_analysis.slope}</p>
+                    <p><strong>R²:</strong> ${data.trend_analysis.r_squared}</p>
+                    <p><strong>p-value:</strong> ${data.trend_analysis.p_value}</p>
+                    <p style="margin-top: 10px; font-weight: 600;">
+                        ${data.trend_analysis.interpretation}
+                    </p>
+                </div>
+            `;
+
+            resultsDiv.classList.remove('hidden');
+        }
+
+        // Charge les équipes au démarrage
+        window.addEventListener('load', () => {
+            loadTeams();
+        });
+    </script>
+</body>
+</html>
+
+<!-- ╔═══════════════════════════════════════════════════════════════╗ -->
+<!-- ║                    FIN PART 3/3                               ║ -->
+<!-- ║  ✅ FICHIER COMPLET! SAUVEGARDE MAINTENANT                    ║ -->
+<!-- ╚═══════════════════════════════════════════════════════════════╝ -->
+
