@@ -1,1 +1,489 @@
-test
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NBA Betting Analyzer v3.0</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: white;
+            border-radius: 20px;
+            padding: 40px;
+            margin-bottom: 30px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+            text-align: center;
+        }
+
+        h1 {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            color: #666;
+            font-size: 1.1em;
+        }
+
+        .card {
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 8px;
+            font-size: 1em;
+        }
+
+        select, input {
+            width: 100%;
+            padding: 14px;
+            border: 2px solid #e0e0e0;
+            border-radius: 12px;
+            font-size: 1em;
+            transition: all 0.3s;
+        }
+
+        select:focus, input:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102,126,234,0.1);
+        }
+
+        .btn {
+            width: 100%;
+            padding: 16px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            font-size: 1.1em;
+            font-weight: 700;
+            cursor: pointer;
+            transition: all 0.3s;
+            margin-top: 10px;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 25px rgba(102,126,234,0.4);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #667eea;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .results {
+            display: none;
+        }
+
+        .prediction-box {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 16px;
+            margin-bottom: 25px;
+            text-align: center;
+        }
+
+        .prediction-value {
+            font-size: 3.5em;
+            font-weight: 800;
+            margin: 15px 0;
+        }
+
+        .recommendation {
+            background: #f8fafc;
+            padding: 25px;
+            border-radius: 16px;
+            margin-bottom: 20px;
+        }
+
+        .recommendation.over {
+            border-left: 6px solid #10b981;
+        }
+
+        .recommendation.under {
+            border-left: 6px solid #ef4444;
+        }
+
+        .recommendation.skip {
+            border-left: 6px solid #f59e0b;
+        }
+
+        .rec-title {
+            font-size: 1.5em;
+            font-weight: 700;
+            margin-bottom: 15px;
+        }
+
+        .rec-title.over { color: #10b981; }
+        .rec-title.under { color: #ef4444; }
+        .rec-title.skip { color: #f59e0b; }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+            margin-top: 15px;
+        }
+
+        .stat-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px;
+            background: white;
+            border-radius: 8px;
+        }
+
+        .stat-label {
+            color: #666;
+        }
+
+        .stat-value {
+            font-weight: 700;
+            color: #333;
+        }
+
+        .info-section {
+            background: #f8fafc;
+            padding: 20px;
+            border-radius: 12px;
+            margin-top: 15px;
+        }
+
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .info-row:last-child {
+            border-bottom: none;
+        }
+
+        .error {
+            background: #fee2e2;
+            border: 2px solid #fca5a5;
+            color: #991b1b;
+            padding: 20px;
+            border-radius: 12px;
+            text-align: center;
+        }
+
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🏀 NBA Betting Analyzer v3.0</h1>
+            <p class="subtitle">Prédictions basées sur les vraies données NBA 2024-25</p>
+        </div>
+
+        <div class="card">
+            <form id="analyzeForm">
+                <!-- Nom du joueur (texte libre) -->
+                <div class="form-group">
+                    <label>👤 Nom du joueur</label>
+                    <input type="text" id="playerInput" placeholder="Ex: LeBron James" required>
+                    <small style="color: #666;">Entre le nom complet (prénom + nom)</small>
+                </div>
+
+                <!-- Adversaire -->
+                <div class="form-group">
+                    <label>🏀 Adversaire</label>
+                    <select id="opponentSelect" required>
+                    <select id="opponentSelect" required>
+                        <option value="">-- Sélectionne l'adversaire --</option>
+                        <option value="ATL">Atlanta Hawks</option>
+                        <option value="BOS">Boston Celtics</option>
+                        <option value="BKN">Brooklyn Nets</option>
+                        <option value="CHA">Charlotte Hornets</option>
+                        <option value="CHI">Chicago Bulls</option>
+                        <option value="CLE">Cleveland Cavaliers</option>
+                        <option value="DAL">Dallas Mavericks</option>
+                        <option value="DEN">Denver Nuggets</option>
+                        <option value="DET">Detroit Pistons</option>
+                        <option value="GSW">Golden State Warriors</option>
+                        <option value="HOU">Houston Rockets</option>
+                        <option value="IND">Indiana Pacers</option>
+                        <option value="LAC">LA Clippers</option>
+                        <option value="LAL">Los Angeles Lakers</option>
+                        <option value="MEM">Memphis Grizzlies</option>
+                        <option value="MIA">Miami Heat</option>
+                        <option value="MIL">Milwaukee Bucks</option>
+                        <option value="MIN">Minnesota Timberwolves</option>
+                        <option value="NOP">New Orleans Pelicans</option>
+                        <option value="NYK">New York Knicks</option>
+                        <option value="OKC">Oklahoma City Thunder</option>
+                        <option value="ORL">Orlando Magic</option>
+                        <option value="PHI">Philadelphia 76ers</option>
+                        <option value="PHX">Phoenix Suns</option>
+                        <option value="POR">Portland Trail Blazers</option>
+                        <option value="SAC">Sacramento Kings</option>
+                        <option value="SAS">San Antonio Spurs</option>
+                        <option value="TOR">Toronto Raptors</option>
+                        <option value="UTA">Utah Jazz</option>
+                        <option value="WAS">Washington Wizards</option>
+                    </select>
+                </div>
+
+                <!-- Domicile/Extérieur -->
+                <div class="form-group">
+                    <label>📍 Localisation</label>
+                    <select id="isHomeSelect" required>
+                        <option value="true">🏠 Domicile</option>
+                        <option value="false">✈️ Extérieur</option>
+                    </select>
+                </div>
+
+                <!-- Ligne de pari -->
+                <div class="form-group">
+                    <label>🎯 Ligne de pari (points)</label>
+                    <input type="number" id="lineInput" step="0.5" placeholder="Ex: 25.5" required>
+                    <small style="color: #666;">La ligne O/U du bookmaker</small>
+                </div>
+
+                <button type="submit" class="btn">
+                    🔮 Analyser
+                </button>
+            </form>
+        </div>
+
+        <!-- Loading -->
+        <div id="loadingDiv" class="card loading hidden">
+            <div class="spinner"></div>
+            <h3>Analyse en cours...</h3>
+            <p>Récupération des données NBA et calcul des prédictions</p>
+        </div>
+
+        <!-- Results -->
+        <div id="resultsDiv" class="card results"></div>
+    </div>
+
+    <script>
+        const API_URL = 'https://nba-betting-1.onrender.com/api';
+
+        const playerInput = document.getElementById('playerInput');
+        const opponentSelect = document.getElementById('opponentSelect');
+        const isHomeSelect = document.getElementById('isHomeSelect');
+        const lineInput = document.getElementById('lineInput');
+        const form = document.getElementById('analyzeForm');
+        const loadingDiv = document.getElementById('loadingDiv');
+        const resultsDiv = document.getElementById('resultsDiv');
+
+        // Soumettre le formulaire
+        form.addEventListener('submit', async (e) => {
+            e.preventDefault();
+
+            const player = playerInput.value.trim();
+            const opponent = opponentSelect.value;
+            const isHome = isHomeSelect.value === 'true';
+            const line = parseFloat(lineInput.value);
+
+            if (!player || !opponent || !line) {
+                alert('Remplis tous les champs!');
+                return;
+            }
+
+            // Afficher loading
+            loadingDiv.classList.remove('hidden');
+            resultsDiv.style.display = 'none';
+
+            try {
+                const response = await fetch(`${API_URL}/analyze`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ player, opponent, is_home: isHome, line })
+                });
+
+                const data = await response.json();
+
+                if (data.status === 'SUCCESS') {
+                    displayResults(data);
+                } else {
+                    displayError(data.error || 'Erreur inconnue');
+                }
+            } catch (error) {
+                displayError('Impossible de se connecter au serveur');
+                console.error('Erreur:', error);
+            } finally {
+                loadingDiv.classList.add('hidden');
+            }
+        });
+
+        function displayResults(data) {
+            const rec = data.line_analysis.recommendation;
+            const recClass = rec.toLowerCase();
+
+            resultsDiv.innerHTML = `
+                <div class="prediction-box">
+                    <h2>${data.player}</h2>
+                    <p>${data.is_home ? 'vs' : '@'} ${data.opponent}</p>
+                    <div class="prediction-value">${data.prediction} pts</div>
+                    <p style="font-size: 0.9em; opacity: 0.9;">IC 95%: ${data.confidence_interval.lower} - ${data.confidence_interval.upper}</p>
+                </div>
+
+                <div class="recommendation ${recClass}">
+                    <div class="rec-title ${recClass}">
+                        ${rec === 'OVER' ? '📈' : rec === 'UNDER' ? '📉' : '⏸️'} 
+                        ${rec} ${data.line_analysis.bookmaker_line} points
+                    </div>
+                    
+                    <div class="stats-grid">
+                        <div class="stat-item">
+                            <span class="stat-label">Prob. Over:</span>
+                            <span class="stat-value">${(data.line_analysis.over_probability * 100).toFixed(1)}%</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Prob. Under:</span>
+                            <span class="stat-value">${(data.line_analysis.under_probability * 100).toFixed(1)}%</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Edge:</span>
+                            <span class="stat-value">${(data.line_analysis.edge * 100).toFixed(1)}%</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Confiance:</span>
+                            <span class="stat-value">${data.line_analysis.bet_confidence}</span>
+                        </div>
+                        <div class="stat-item">
+                            <span class="stat-label">Kelly:</span>
+                            <span class="stat-value">${(data.line_analysis.kelly_criterion * 100).toFixed(1)}%</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="info-section">
+                    <h3 style="margin-bottom: 15px;">📊 Stats de saison</h3>
+                    <div class="info-row">
+                        <span>Moyenne pondérée:</span>
+                        <strong>${data.season_stats.weighted_avg} pts</strong>
+                    </div>
+                    <div class="info-row">
+                        <span>Écart-type (σ):</span>
+                        <strong>${data.season_stats.std_dev}</strong>
+                    </div>
+                    <div class="info-row">
+                        <span>Matchs joués:</span>
+                        <strong>${data.season_stats.games_played}</strong>
+                    </div>
+                    <div class="info-row">
+                        <span>Consistance:</span>
+                        <strong>${data.season_stats.consistency_level}</strong>
+                    </div>
+                </div>
+
+                ${data.splits.home || data.splits.away ? `
+                <div class="info-section">
+                    <h3 style="margin-bottom: 15px;">🏠 Splits Domicile/Extérieur</h3>
+                    ${data.splits.home ? `
+                    <div class="info-row">
+                        <span>Domicile:</span>
+                        <strong>${data.splits.home.avg} pts (${data.splits.home.games} matchs)</strong>
+                    </div>
+                    ` : ''}
+                    ${data.splits.away ? `
+                    <div class="info-row">
+                        <span>Extérieur:</span>
+                        <strong>${data.splits.away.avg} pts (${data.splits.away.games} matchs)</strong>
+                    </div>
+                    ` : ''}
+                </div>
+                ` : ''}
+
+                <div class="info-section">
+                    <h3 style="margin-bottom: 15px;">📈 Analyse de tendance</h3>
+                    <div class="info-row">
+                        <span>R² (qualité du modèle):</span>
+                        <strong>${data.trend_analysis.r_squared}</strong>
+                    </div>
+                    <div class="info-row">
+                        <span>P-value:</span>
+                        <strong>${data.trend_analysis.p_value}</strong>
+                    </div>
+                    <div class="info-row">
+                        <span>Pente (tendance):</span>
+                        <strong>${data.trend_analysis.slope}</strong>
+                    </div>
+                    <div class="info-row">
+                        <span>Interprétation:</span>
+                        <strong>${data.trend_analysis.interpretation}</strong>
+                    </div>
+                </div>
+            `;
+
+            resultsDiv.style.display = 'block';
+            resultsDiv.scrollIntoView({ behavior: 'smooth' });
+        }
+
+        function displayError(message) {
+            resultsDiv.innerHTML = `
+                <div class="error">
+                    <h2>❌ Erreur</h2>
+                    <p>${message}</p>
+                    <p style="margin-top: 10px; font-size: 0.9em;">Vérifie que le nom du joueur est correct (prénom + nom)</p>
+                </div>
+            `;
+            resultsDiv.style.display = 'block';
+        }
+    </script>
+</body>
+</html>
