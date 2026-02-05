@@ -736,3 +736,4 @@ if __name__ == '__main__':
     print("\n✅ Serveur démarré!\n")
     
     app.run(debug=debug, host='0.0.0.0', port=port)
+ 
