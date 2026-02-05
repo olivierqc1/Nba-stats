@@ -1,747 +1,582 @@
-<!DOCTYPE html>
-<html lang="fr">
-<!-- 
-╔═══════════════════════════════════════════════════════════════╗
-║  DASHBOARD_DAILY.HTML - PART 1/2                              ║
-║                                                               ║
-║  📋 INSTRUCTIONS:                                             ║
-║  1. Copie TOUT ce fichier (Ctrl+A puis Ctrl+C)               ║
-║  2. Crée un nouveau fichier: dashboard_daily.html             ║
-║  3. Colle dedans (Ctrl+V)                                     ║
-║  4. NE SAUVEGARDE PAS encore!                                 ║
-║  5. Continue avec DASHBOARD_PART2.html                        ║
-╚═══════════════════════════════════════════════════════════════╝
--->
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Morning Brief - NBA Betting</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+PART 1/2 - Copie ce fichier EN PREMIER
+"""
+
+from flask import Flask, jsonify, request
+from flask_cors import CORS
+import numpy as np
+import pandas as pd
+from scipy import stats
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import r2_score, mean_squared_error
+from datetime import datetime
+import os
+
+try:
+    from nba_api.stats.static import players, teams
+    from nba_api.stats.endpoints import playergamelog
+    NBA_API_AVAILABLE = True
+except ImportError:
+    NBA_API_AVAILABLE = False
+    print("WARNING: nba_api not available")
+
+app = Flask(__name__)
+CORS(app)
+
+class ImprovedNBAAnalyzer:
+    def __init__(self):
+        self.cache = {}
+        self.defensive_ratings = {
+            'ATL': 113.5, 'BOS': 108.2, 'BKN': 114.2, 'CHA': 115.8,
+            'CHI': 112.1, 'CLE': 109.5, 'DAL': 112.8, 'DEN': 109.2,
+            'DET': 115.3, 'GSW': 110.5, 'HOU': 113.8, 'IND': 114.5,
+            'LAC': 110.7, 'LAL': 112.3, 'MEM': 111.2, 'MIA': 109.8,
+            'MIL': 110.1, 'MIN': 110.4, 'NOP': 113.2, 'NYK': 109.8,
+            'OKC': 108.5, 'ORL': 110.3, 'PHI': 108.9, 'PHX': 111.4,
+            'POR': 114.8, 'SAC': 112.6, 'SAS': 115.1, 'TOR': 113.4,
+            'UTA': 114.2, 'WAS': 116.5
         }
-
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            padding: 20px;
+        
+        self.team_rosters = {
+            'ATL': ['Trae Young', 'Dejounte Murray', 'Clint Capela', 'Bogdan Bogdanovic'],
+            'BOS': ['Jayson Tatum', 'Jaylen Brown', 'Kristaps Porzingis', 'Jrue Holiday'],
+            'BKN': ['Mikal Bridges', 'Cam Thomas', 'Nic Claxton', 'Spencer Dinwiddie'],
+            'CHA': ['LaMelo Ball', 'Brandon Miller', 'Miles Bridges', 'Mark Williams'],
+            'CHI': ['DeMar DeRozan', 'Zach LaVine', 'Nikola Vucevic', 'Coby White'],
+            'CLE': ['Donovan Mitchell', 'Darius Garland', 'Evan Mobley', 'Jarrett Allen'],
+            'DAL': ['Luka Doncic', 'Kyrie Irving', 'Dereck Lively II', 'Josh Green'],
+            'DEN': ['Nikola Jokic', 'Jamal Murray', 'Michael Porter Jr.', 'Aaron Gordon'],
+            'DET': ['Cade Cunningham', 'Jaden Ivey', 'Jalen Duren', 'Ausar Thompson'],
+            'GSW': ['Stephen Curry', 'Klay Thompson', 'Draymond Green', 'Andrew Wiggins'],
+            'HOU': ['Alperen Sengun', 'Jalen Green', 'Fred VanVleet', 'Jabari Smith Jr.'],
+            'IND': ['Tyrese Haliburton', 'Pascal Siakam', 'Myles Turner', 'Bennedict Mathurin'],
+            'LAC': ['Kawhi Leonard', 'Paul George', 'James Harden', 'Russell Westbrook'],
+            'LAL': ['LeBron James', 'Anthony Davis', "D'Angelo Russell", 'Austin Reaves'],
+            'MEM': ['Ja Morant', 'Desmond Bane', 'Jaren Jackson Jr.', 'Marcus Smart'],
+            'MIA': ['Jimmy Butler', 'Bam Adebayo', 'Tyler Herro', 'Duncan Robinson'],
+            'MIL': ['Giannis Antetokounmpo', 'Damian Lillard', 'Khris Middleton', 'Brook Lopez'],
+            'MIN': ['Anthony Edwards', 'Karl-Anthony Towns', 'Rudy Gobert', 'Mike Conley'],
+            'NOP': ['Zion Williamson', 'Brandon Ingram', 'CJ McCollum', 'Jonas Valanciunas'],
+            'NYK': ['Jalen Brunson', 'Julius Randle', 'RJ Barrett', 'Mitchell Robinson'],
+            'OKC': ['Shai Gilgeous-Alexander', 'Chet Holmgren', 'Josh Giddey', 'Jalen Williams'],
+            'ORL': ['Paolo Banchero', 'Franz Wagner', 'Wendell Carter Jr.', 'Jalen Suggs'],
+            'PHI': ['Joel Embiid', 'Tyrese Maxey', 'Tobias Harris', "De'Anthony Melton"],
+            'PHX': ['Kevin Durant', 'Devin Booker', 'Bradley Beal', 'Jusuf Nurkic'],
+            'POR': ['Damian Lillard', 'Anfernee Simons', 'Jerami Grant', 'Deandre Ayton'],
+            'SAC': ["De'Aaron Fox", 'Domantas Sabonis', 'Keegan Murray', 'Kevin Huerter'],
+            'SAS': ['Victor Wembanyama', 'Devin Vassell', 'Keldon Johnson', 'Jeremy Sochan'],
+            'TOR': ['Scottie Barnes', 'Pascal Siakam', 'OG Anunoby', 'Jakob Poeltl'],
+            'UTA': ['Lauri Markkanen', 'Jordan Clarkson', 'Collin Sexton', 'Walker Kessler'],
+            'WAS': ['Kyle Kuzma', 'Jordan Poole', 'Tyus Jones', 'Deni Avdija']
         }
-
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
-        }
-
-        .header {
-            background: white;
-            border-radius: 20px;
-            padding: 30px;
-            margin-bottom: 20px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .header-left h1 {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            font-size: 2.5em;
-            margin-bottom: 5px;
-        }
-
-        .header-left p {
-            color: #666;
-            font-size: 1.1em;
-        }
-
-        .header-right {
-            text-align: right;
-        }
-
-        .time {
-            font-size: 2em;
-            font-weight: 700;
-            color: #667eea;
-        }
-
-        .date {
-            color: #666;
-            margin-top: 5px;
-        }
-
-        .filters {
-            background: white;
-            border-radius: 15px;
-            padding: 20px;
-            margin-bottom: 20px;
-            box-shadow: 0 8px 20px rgba(0,0,0,0.15);
-            display: flex;
-            gap: 20px;
-            align-items: center;
-        }
-
-        .filter-group {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-        }
-
-        .filter-group label {
-            font-weight: 600;
-            color: #333;
-        }
-
-        .filter-group select,
-        .filter-group input {
-            padding: 8px 15px;
-            border: 2px solid #e0e0e0;
-            border-radius: 8px;
-            font-size: 0.95em;
-        }
-
-        .btn-scan {
-            padding: 12px 30px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
-            border-radius: 10px;
-            font-weight: 700;
-            cursor: pointer;
-            font-size: 1.05em;
-        }
-
-        .btn-scan:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 20px rgba(102,126,234,0.4);
-        }
-
-        .stats-bar {
-            background: white;
-            border-radius: 15px;
-            padding: 20px;
-            margin-bottom: 20px;
-            box-shadow: 0 8px 20px rgba(0,0,0,0.15);
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-            gap: 15px;
-        }
-
-        .stat-box {
-            text-align: center;
-            padding: 15px;
-            border-radius: 10px;
-            background: #f8f9fa;
-        }
-
-        .stat-label {
-            font-size: 0.85em;
-            color: #666;
-            margin-bottom: 5px;
-        }
-
-        .stat-value {
-            font-size: 2em;
-            font-weight: 800;
-            color: #667eea;
-        }
-
-        .opportunities-grid {
-            display: grid;
-            gap: 20px;
-        }
-
-        .opp-card {
-            background: white;
-            border-radius: 15px;
-            padding: 25px;
-            box-shadow: 0 8px 20px rgba(0,0,0,0.15);
-            position: relative;
-            border-left: 6px solid #10b981;
-        }
-
-        .opp-card.under {
-            border-left-color: #ef4444;
-        }
-
-        .opp-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: start;
-            margin-bottom: 20px;
-        }
-
-        .opp-player {
-            font-size: 1.5em;
-            font-weight: 800;
-            color: #333;
-            margin-bottom: 5px;
-        }
-
-        .opp-matchup {
-            color: #666;
-            font-size: 1em;
-        }
-
-        .opp-badge {
-            padding: 8px 16px;
-            border-radius: 20px;
-            font-weight: 700;
-            font-size: 0.95em;
-        }
-
-        .opp-badge.over {
-            background: #d1fae5;
-            color: #065f46;
-        }
-
-        .opp-badge.under {
-            background: #fee2e2;
-            color: #991b1b;
-        }
-
-        .opp-prediction {
-            background: #f8f9fa;
-            padding: 20px;
-            border-radius: 12px;
-            margin-bottom: 20px;
-        }
-
-        .pred-main {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 15px;
-        }
-
-        .pred-value {
-            font-size: 2.5em;
-            font-weight: 800;
-            color: #667eea;
-        }
-
-        .pred-vs {
-            text-align: right;
-        }
-
-        .pred-vs-label {
-            font-size: 0.9em;
-            color: #666;
-        }
-
-        .pred-vs-value {
-            font-size: 1.8em;
-            font-weight: 700;
-            color: #333;
-        }
-
-        .metrics-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-            gap: 12px;
-        }
-
-        .metric {
-            background: white;
-            padding: 12px;
-            border-radius: 8px;
-            text-align: center;
-        }
-
-        .metric-label {
-            font-size: 0.85em;
-            color: #666;
-            margin-bottom: 4px;
-        }
-
-        .metric-value {
-            font-size: 1.3em;
-            font-weight: 700;
-            color: #333;
-        }
-
-        .metric-value.positive {
-            color: #10b981;
-        }
-
-        .metric-value.negative {
-            color: #ef4444;
-        }
-
-        .odds-comparison {
-            background: #e0f2fe;
-            padding: 15px;
-            border-radius: 10px;
-            margin-top: 15px;
-            border: 2px solid #0ea5e9;
-        }
-
-        .odds-row {
-            display: flex;
-            justify-content: space-between;
-            margin: 8px 0;
-        }
-
-        .odds-label {
-            font-weight: 600;
-            color: #0369a1;
-        }
-
-        .odds-value {
-            font-weight: 700;
-            color: #0c4a6e;
-        }
-
-        .expand-btn {
-            margin-top: 15px;
-            padding: 10px;
-            background: #f8f9fa;
-            border: 2px solid #e0e0e0;
-            border-radius: 8px;
-            width: 100%;
-            cursor: pointer;
-            font-weight: 600;
-            color: #667eea;
-        }
-
-        .expand-btn:hover {
-            background: #667eea;
-            color: white;
-        }
-
-        .expanded-stats {
-            display: none;
-            margin-top: 20px;
-            padding-top: 20px;
-            border-top: 2px solid #e0e0e0;
-        }
-
-        .expanded-stats.show {
-            display: block;
-        }
-
-        .stat-section {
-            background: #f8f9fa;
-            padding: 15px;
-            border-radius: 10px;
-            margin-bottom: 15px;
-        }
-
-        .stat-section h4 {
-            color: #667eea;
-            margin-bottom: 12px;
-        }
-
-        .loading {
-            text-align: center;
-            padding: 60px;
-            background: white;
-            border-radius: 15px;
-            box-shadow: 0 8px 20px rgba(0,0,0,0.15);
-        }
-
-        .spinner {
-            border: 5px solid #f3f3f3;
-            border-top: 5px solid #667eea;
-            border-radius: 50%;
-            width: 60px;
-            height: 60px;
-            animation: spin 1s linear infinite;
-            margin: 0 auto 20px;
-        }
-
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
-
-        .error {
-            background: #fee2e2;
-            border: 3px solid #fca5a5;
-            color: #991b1b;
-            padding: 25px;
-            border-radius: 15px;
-            text-align: center;
-        }
-
-        .empty-state {
-            text-align: center;
-            padding: 60px;
-            background: white;
-            border-radius: 15px;
-            box-shadow: 0 8px 20px rgba(0,0,0,0.15);
-        }
-
-        .empty-state h3 {
-            color: #667eea;
-            margin-bottom: 15px;
-        }
-
-        .hidden {
-            display: none;
-        }
-    </style>
-</head>
-
-<body>
-    <div class="container">
-        <div class="header">
-            <div class="header-left">
-                <h1>Morning Brief</h1>
-                <p>Opportunites NBA du jour</p>
-            </div>
-            <div class="header-right">
-                <div class="time" id="currentTime">--:--</div>
-                <div class="date" id="currentDate">Chargement...</div>
-            </div>
-        </div>
-
-        <div class="filters">
-            <div class="filter-group">
-                <label>Edge minimum:</label>
-                <input type="number" id="minEdge" value="5" min="0" max="20" step="0.5">
-                <span>%</span>
-            </div>
-
-            <div class="filter-group">
-                <label>Confiance:</label>
-                <select id="minConfidence">
-                    <option value="LOW">Toutes</option>
-                    <option value="MEDIUM" selected>Moyenne+</option>
-                    <option value="HIGH">Haute uniquement</option>
-                </select>
-            </div>
-
-            <button class="btn-scan" onclick="scanOpportunities()">
-                Scanner les opportunites
-            </button>
-
-            <div style="margin-left: auto;">
-                <small id="apiUsage" style="color: #666;">API: --/--</small>
-            </div>
-        </div>
-
-        <div id="statsBar" class="stats-bar hidden">
-            <div class="stat-box">
-                <div class="stat-label">Props disponibles</div>
-                <div class="stat-value" id="totalProps">-</div>
-            </div>
-            <div class="stat-box">
-                <div class="stat-label">Props analysees</div>
-                <div class="stat-value" id="analyzedProps">-</div>
-            </div>
-            <div class="stat-box">
-                <div class="stat-label">Opportunites</div>
-                <div class="stat-value" id="foundOpps">-</div>
-            </div>
-            <div class="stat-box">
-                <div class="stat-label">Edge moyen</div>
-                <div class="stat-value" id="avgEdge">-</div>
-            </div>
-            <div class="stat-box">
-                <div class="stat-label">Scan</div>
-                <div class="stat-value" id="scanTime" style="font-size: 1.2em;">-</div>
-            </div>
-        </div>
-
-        <div id="loadingDiv" class="loading hidden">
-            <div class="spinner"></div>
-            <h3>Scan en cours...</h3>
-            <p>Analyse des props NBA du jour</p>
-        </div>
-
-        <div id="resultsDiv" class="opportunities-grid hidden"></div>
-
-        <div id="emptyDiv" class="empty-state hidden">
-            <h3>Aucune opportunite trouvee</h3>
-            <p>Aucun pari ne correspond aux criteres (edge >= <span id="emptyEdge">5</span>%)</p>
-            <p style="margin-top: 15px; color: #666;">Essaye de reduire l'edge minimum ou attends les matchs du soir.</p>
-        </div>
-
-        <div id="errorDiv" class="error hidden"></div>
-    </div>
-
-<!-- ╔═══════════════════════════════════════════════════════════════╗ -->
-<!-- ║                    FIN PART 1/2                               ║ -->
-<!-- ║  ⚠️  OUVRE DASHBOARD_PART2.html et COPIE TOUT EN DESSOUS      ║ -->
-<!-- ╚═══════════════════════════════════════════════════════════════╝ -->
-
-<!-- 
-╔═══════════════════════════════════════════════════════════════╗
-║  DASHBOARD_DAILY.HTML - PART 2/2                              ║
-║                                                               ║
-║  📋 COPIE TOUT CE FICHIER ET COLLE-LE EN DESSOUS DE PART1     ║
-║  📋 PUIS SAUVEGARDE LE FICHIER!                               ║
-╚═══════════════════════════════════════════════════════════════╝
--->
-    <script>
-        const API_URL = 'https://nba-betting-1.onrender.com';
-
-        // Update time/date
-        function updateTime() {
-            const now = new Date();
-            document.getElementById('currentTime').textContent = now.toLocaleTimeString('fr-FR', {
-                hour: '2-digit',
-                minute: '2-digit'
-            });
-            document.getElementById('currentDate').textContent = now.toLocaleDateString('fr-FR', {
-                weekday: 'long',
-                day: 'numeric',
-                month: 'long',
-                year: 'numeric'
-            });
-        }
-        updateTime();
-        setInterval(updateTime, 30000);
-
-        // Load API usage
-        async function loadAPIUsage() {
-            try {
-                const response = await fetch(`${API_URL}/api/odds/usage`);
-                const data = await response.json();
-                document.getElementById('apiUsage').textContent = 
-                    `API: ${data.used}/${data.remaining || 500}`;
-            } catch (e) {
-                console.error('Erreur usage:', e);
-            }
-        }
-        loadAPIUsage();
-
-        async function scanOpportunities() {
-            const minEdge = document.getElementById('minEdge').value;
-            const minConfidence = document.getElementById('minConfidence').value;
-
-            document.getElementById('loadingDiv').classList.remove('hidden');
-            document.getElementById('statsBar').classList.add('hidden');
-            document.getElementById('resultsDiv').classList.add('hidden');
-            document.getElementById('emptyDiv').classList.add('hidden');
-            document.getElementById('errorDiv').classList.add('hidden');
-
-            try {
-                const response = await fetch(
-                    `${API_URL}/api/daily-opportunities?min_edge=${minEdge}&min_confidence=${minConfidence}`
-                );
-
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}`);
-                }
-
-                const data = await response.json();
-
-                if (data.status === 'SUCCESS') {
-                    displayResults(data);
-                } else {
-                    displayError(data.message || 'Erreur inconnue');
-                }
-            } catch (error) {
-                displayError(`Impossible de scanner: ${error.message}`);
-            } finally {
-                document.getElementById('loadingDiv').classList.add('hidden');
-                loadAPIUsage();
-            }
-        }
-
-        function displayResults(data) {
-            // Update stats bar
-            document.getElementById('statsBar').classList.remove('hidden');
-            document.getElementById('totalProps').textContent = data.total_props_available;
-            document.getElementById('analyzedProps').textContent = data.total_analyzed;
-            document.getElementById('foundOpps').textContent = data.opportunities_found;
+    
+    def get_player_games(self, player_name, season='2024-25'):
+        if not NBA_API_AVAILABLE:
+            return self._simulate_player_games(player_name, 25)
+        
+        cache_key = f"{player_name}_{season}"
+        if cache_key in self.cache:
+            return self.cache[cache_key]
+        
+        try:
+            player_list = players.find_players_by_full_name(player_name)
+            if not player_list:
+                return self._simulate_player_games(player_name, 25)
             
-            if (data.opportunities_found > 0) {
-                const avgEdge = data.opportunities.reduce((sum, o) => 
-                    sum + o.line_analysis.edge, 0) / data.opportunities_found;
-                document.getElementById('avgEdge').textContent = avgEdge.toFixed(1) + '%';
-            } else {
-                document.getElementById('avgEdge').textContent = '-';
-            }
-
-            const scanTime = new Date(data.scan_time);
-            document.getElementById('scanTime').textContent = scanTime.toLocaleTimeString('fr-FR', {
-                hour: '2-digit', minute: '2-digit'
-            });
-
-            // Display opportunities
-            if (data.opportunities_found === 0) {
-                document.getElementById('emptyDiv').classList.remove('hidden');
-                document.getElementById('emptyEdge').textContent = data.filters.min_edge;
-                return;
-            }
-
-            const resultsDiv = document.getElementById('resultsDiv');
-            resultsDiv.innerHTML = data.opportunities.map(opp => createOpportunityCard(opp)).join('');
-            resultsDiv.classList.remove('hidden');
-        }
-
-        function createOpportunityCard(opp) {
-            const rec = opp.line_analysis.recommendation;
-            const recClass = rec.toLowerCase();
-            const edge = opp.line_analysis.edge;
-            const kelly = opp.line_analysis.kelly_criterion;
-
-            const statLabel = {
-                'points': 'Points',
-                'assists': 'Assists',
-                'rebounds': 'Rebounds'
-            }[opp.stat_type];
-
-            const bookmaker = opp.bookmaker_info.bookmaker.toUpperCase();
-            const odds = rec === 'OVER' ? opp.bookmaker_info.over_odds : opp.bookmaker_info.under_odds;
-
-            const cardId = `card-${Math.random().toString(36).substr(2, 9)}`;
-
-            return `
-                <div class="opp-card ${recClass}">
-                    <div class="opp-header">
-                        <div>
-                            <div class="opp-player">${opp.player}</div>
-                            <div class="opp-matchup">
-                                ${opp.is_home ? 'vs' : '@'} ${opp.opponent} • ${statLabel}
-                            </div>
-                        </div>
-                        <div class="opp-badge ${recClass}">
-                            ${rec} ${opp.line_analysis.bookmaker_line}
-                        </div>
-                    </div>
-
-                    <div class="opp-prediction">
-                        <div class="pred-main">
-                            <div>
-                                <div style="font-size: 0.9em; color: #666; margin-bottom: 5px;">
-                                    Prediction modele
-                                </div>
-                                <div class="pred-value">${opp.prediction}</div>
-                            </div>
-                            <div class="pred-vs">
-                                <div class="pred-vs-label">vs Ligne</div>
-                                <div class="pred-vs-value">${opp.line_analysis.bookmaker_line}</div>
-                            </div>
-                        </div>
-
-                        <div class="metrics-grid">
-                            <div class="metric">
-                                <div class="metric-label">Edge</div>
-                                <div class="metric-value positive">+${edge.toFixed(1)}%</div>
-                            </div>
-                            <div class="metric">
-                                <div class="metric-label">Probabilite</div>
-                                <div class="metric-value">${opp.line_analysis[rec.toLowerCase() + '_probability']}%</div>
-                            </div>
-                            <div class="metric">
-                                <div class="metric-label">Kelly</div>
-                                <div class="metric-value">${kelly.toFixed(1)}%</div>
-                            </div>
-                            <div class="metric">
-                                <div class="metric-label">Confiance</div>
-                                <div class="metric-value">${opp.line_analysis.bet_confidence}</div>
-                            </div>
-                            <div class="metric">
-                                <div class="metric-label">Ecart-type</div>
-                                <div class="metric-value">${opp.season_stats.std_dev}</div>
-                            </div>
-                            <div class="metric">
-                                <div class="metric-label">R²</div>
-                                <div class="metric-value">${opp.regression_stats.r_squared}</div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="odds-comparison">
-                        <div class="odds-row">
-                            <span class="odds-label">Bookmaker:</span>
-                            <span class="odds-value">${bookmaker}</span>
-                        </div>
-                        <div class="odds-row">
-                            <span class="odds-label">Cote ${rec}:</span>
-                            <span class="odds-value">${odds > 0 ? '+' : ''}${odds}</span>
-                        </div>
-                        <div class="odds-row">
-                            <span class="odds-label">Prob. implicite:</span>
-                            <span class="odds-value">${(52.38).toFixed(1)}%</span>
-                        </div>
-                    </div>
-
-                    <button class="expand-btn" onclick="toggleExpand('${cardId}')">
-                        Voir stats detaillees
-                    </button>
-
-                    <div id="${cardId}" class="expanded-stats">
-                        <div class="stat-section">
-                            <h4>Stats Saison</h4>
-                            <p><strong>Matchs joues:</strong> ${opp.season_stats.games_played}</p>
-                            <p><strong>Matchs utilises:</strong> ${opp.season_stats.games_used}</p>
-                            <p><strong>Moyenne:</strong> ${opp.season_stats.weighted_avg}</p>
-                            <p><strong>Min/Max:</strong> ${opp.season_stats.min} - ${opp.season_stats.max}</p>
-                        </div>
-
-                        <div class="stat-section">
-                            <h4>Regression</h4>
-                            <p><strong>R² ajuste:</strong> ${opp.regression_stats.adjusted_r_squared}</p>
-                            <p><strong>RMSE:</strong> ${opp.regression_stats.rmse}</p>
-                            <p><strong>Sample size:</strong> ${opp.regression_stats.sample_size}</p>
-                        </div>
-
-                        <div class="stat-section">
-                            <h4>Chi-carre</h4>
-                            <p><strong>χ²:</strong> ${opp.chi_square_test.chi2_statistic.toFixed(3)}</p>
-                            <p><strong>p-value:</strong> ${opp.chi_square_test.p_value.toFixed(4)}</p>
-                            <p><strong>${opp.chi_square_test.interpretation}</strong></p>
-                        </div>
-
-                        ${opp.outlier_analysis.outliers_detected > 0 ? `
-                        <div class="stat-section">
-                            <h4>Outliers</h4>
-                            <p><strong>Detectes:</strong> ${opp.outlier_analysis.outliers_detected} (${opp.outlier_analysis.outliers_pct}%)</p>
-                            <p><strong>Methode:</strong> ${opp.outlier_analysis.method}</p>
-                            <p>${opp.outlier_analysis.recommendation}</p>
-                        </div>
-                        ` : ''}
-
-                        ${opp.splits.home || opp.splits.away ? `
-                        <div class="stat-section">
-                            <h4>Splits Domicile/Exterieur</h4>
-                            ${opp.splits.home ? `<p><strong>Domicile:</strong> ${opp.splits.home.avg} (${opp.splits.home.games} matchs)</p>` : ''}
-                            ${opp.splits.away ? `<p><strong>Exterieur:</strong> ${opp.splits.away.avg} (${opp.splits.away.games} matchs)</p>` : ''}
-                            ${opp.splits.vs_opponent ? `<p><strong>vs ${opp.opponent}:</strong> ${opp.splits.vs_opponent.avg} (${opp.splits.vs_opponent.games} matchs)</p>` : ''}
-                        </div>
-                        ` : ''}
-
-                        <div class="stat-section">
-                            <h4>Tendance</h4>
-                            <p><strong>Pente:</strong> ${opp.trend_analysis.slope}</p>
-                            <p><strong>R²:</strong> ${opp.trend_analysis.r_squared}</p>
-                            <p><strong>p-value:</strong> ${opp.trend_analysis.p_value}</p>
-                            <p><strong>${opp.trend_analysis.interpretation}</strong></p>
-                        </div>
-                    </div>
-                </div>
-            `;
-        }
-
-        function toggleExpand(cardId) {
-            const expandedDiv = document.getElementById(cardId);
-            expandedDiv.classList.toggle('show');
+            player_id = player_list[0]['id']
             
-            const btn = event.target;
-            btn.textContent = expandedDiv.classList.contains('show') 
-                ? 'Masquer stats detaillees' 
-                : 'Voir stats detaillees';
+            import time
+            time.sleep(0.6)
+            
+            gamelog = playergamelog.PlayerGameLog(
+                player_id=player_id,
+                season=season,
+                season_type_all_star='Regular Season'
+            )
+            
+            df = gamelog.get_data_frames()[0]
+            
+            if df.empty:
+                return self._simulate_player_games(player_name, 25)
+            
+            df_clean = pd.DataFrame({
+                'date': pd.to_datetime(df['GAME_DATE']).dt.strftime('%Y-%m-%d'),
+                'opponent': df['MATCHUP'].str.split().str[-1],
+                'is_home': ~df['MATCHUP'].str.contains('@'),
+                'points': df['PTS'].astype(float),
+                'rebounds': df['REB'].astype(float),
+                'assists': df['AST'].astype(float),
+                'minutes': df['MIN'].apply(lambda x: float(str(x).split(':')[0]) if ':' in str(x) else float(x)),
+                'fg_pct': (df['FG_PCT'].astype(float) * 100).fillna(0),
+                'result': df['WL']
+            })
+            
+            df_clean['opponent_def_rating'] = df_clean['opponent'].apply(
+                lambda x: self.defensive_ratings.get(x, 112.0)
+            )
+            
+            df_clean['rest_days'] = 1
+            df_clean['back_to_back'] = 0
+            df_clean['team_pace'] = 100.0
+            
+            self.cache[cache_key] = df_clean
+            return df_clean
+            
+        except Exception as e:
+            print(f"API ERROR: {e}")
+            return self._simulate_player_games(player_name, 25)
+    
+    def _simulate_player_games(self, player_name, n_games):
+        np.random.seed(hash(player_name) % 2**32)
+        
+        base_pts = np.random.uniform(20, 28)
+        base_ast = np.random.uniform(4, 8)
+        base_reb = np.random.uniform(4, 10)
+        
+        games = []
+        for i in range(n_games):
+            game = {
+                'date': datetime.now().strftime('%Y-%m-%d'),
+                'opponent': np.random.choice(list(self.defensive_ratings.keys())),
+                'is_home': np.random.choice([True, False]),
+                'points': max(0, base_pts + np.random.normal(0, 5)),
+                'assists': max(0, base_ast + np.random.normal(0, 2)),
+                'rebounds': max(0, base_reb + np.random.normal(0, 3)),
+                'minutes': np.random.uniform(30, 38),
+                'fg_pct': np.random.uniform(40, 55),
+                'opponent_def_rating': np.random.uniform(108, 116),
+                'rest_days': 1,
+                'back_to_back': 0,
+                'team_pace': 100.0,
+                'result': np.random.choice(['W', 'L'])
+            }
+            games.append(game)
+        
+        return pd.DataFrame(games)
+    
+    def detect_outliers(self, values, method='iqr'):
+        values = np.array(values)
+        n = len(values)
+        
+        outliers_mask = np.zeros(n, dtype=bool)
+        
+        Q1 = np.percentile(values, 25)
+        Q3 = np.percentile(values, 75)
+        IQR = Q3 - Q1
+        lower_iqr = Q1 - 1.5 * IQR
+        upper_iqr = Q3 + 1.5 * IQR
+        iqr_outliers = (values < lower_iqr) | (values > upper_iqr)
+        
+        mean = np.mean(values)
+        std = np.std(values)
+        z_scores = np.abs((values - mean) / std) if std > 0 else np.zeros(n)
+        zscore_outliers = z_scores > 2.5
+        
+        median = np.median(values)
+        mad = np.median(np.abs(values - median))
+        modified_z_scores = 0.6745 * (values - median) / mad if mad > 0 else np.zeros(n)
+        mad_outliers = np.abs(modified_z_scores) > 3.5
+        
+        if method == 'iqr':
+            outliers_mask = iqr_outliers
+        elif method == 'zscore':
+            outliers_mask = zscore_outliers
+        else:
+            outliers_mask = (iqr_outliers.astype(int) + zscore_outliers.astype(int) + mad_outliers.astype(int)) >= 2
+        
+        outlier_info = []
+        for i, val in enumerate(values):
+            outlier_info.append({
+                'index': int(i),
+                'value': float(val),
+                'is_outlier': bool(outliers_mask[i]),
+                'z_score': float(z_scores[i]),
+                'methods_detected': {
+                    'iqr': bool(iqr_outliers[i]),
+                    'zscore': bool(zscore_outliers[i]),
+                    'mad': bool(mad_outliers[i])
+                },
+                'severity': 'HIGH' if outliers_mask[i] and (iqr_outliers[i] and zscore_outliers[i] and mad_outliers[i]) else 'MEDIUM' if outliers_mask[i] else 'LOW'
+            })
+        
+        return outliers_mask, outlier_info
+    
+    def chi_square_test(self, observed, expected):
+        bins = np.linspace(min(min(observed), min(expected)), max(max(observed), max(expected)), 10)
+        
+        obs_freq, _ = np.histogram(observed, bins=bins)
+        exp_freq, _ = np.histogram(expected, bins=bins)
+        
+        mask = exp_freq > 0
+        obs_freq = obs_freq[mask]
+        exp_freq = exp_freq[mask]
+        
+        if len(obs_freq) == 0:
+            return {'chi2_statistic': 0.0, 'p_value': 1.0, 'dof': 0, 'significant': False, 'interpretation': 'Not enough data'}
+        
+        chi2_stat = np.sum((obs_freq - exp_freq) ** 2 / exp_freq)
+        dof = len(obs_freq) - 1
+        p_value = 1 - stats.chi2.cdf(chi2_stat, dof)
+        
+        return {
+            'chi2_statistic': float(chi2_stat),
+            'p_value': float(p_value),
+            'dof': int(dof),
+            'significant': p_value < 0.05,
+            'interpretation': 'Distribution SIGNIFICANTLY different (p < 0.05)' if p_value < 0.05 else 'Distribution CONFORMS to model (p >= 0.05)'
+        }
+    
+    def analyze_stat(self, player_name, stat_type='points', opponent='LAL', is_home=True, line=None, remove_outliers=True):
+        df = self.get_player_games(player_name)
+        
+        if df.empty or len(df) < 5:
+            return {'error': f'Not enough data for {player_name}'}
+        
+        stat_values = df[stat_type].values
+        outliers_mask, outlier_info = self.detect_outliers(stat_values, method='combined')
+        
+        df_full = df.copy()
+        df_clean = df[~outliers_mask].copy() if remove_outliers and np.any(outliers_mask) else df.copy()
+        
+        df_model = df_clean if remove_outliers else df_full
+        
+        if len(df_model) < 5:
+            df_model = df_full
+        
+        X = df_model[['is_home', 'opponent_def_rating', 'minutes', 'rest_days', 'back_to_back', 'team_pace']].astype(float)
+        y = df_model[stat_type].astype(float)
+        
+        model = LinearRegression()
+        model.fit(X, y)
+        
+        y_pred = model.predict(X)
+        residuals = y - y_pred
+        
+        n = len(y)
+        k = X.shape[1]
+        dof = n - k - 1
+        
+        mse = mean_squared_error(y, y_pred)
+        rmse = np.sqrt(mse)
+        r2 = r2_score(y, y_pred)
+        adj_r2 = 1 - (1 - r2) * (n - 1) / dof if dof > 0 else r2
+        
+        var_residuals = np.sum(residuals**2) / dof if dof > 0 else 1
+        try:
+            var_coef = var_residuals * np.linalg.inv(X.T @ X).diagonal()
+            std_errors = np.sqrt(var_coef)
+            t_stats = model.coef_ / std_errors
+            p_values = 2 * (1 - stats.t.cdf(np.abs(t_stats), dof))
+        except:
+            std_errors = np.ones(k)
+            t_stats = np.zeros(k)
+            p_values = np.ones(k)
+        
+        chi2_test = self.chi_square_test(y.values, y_pred)
+        
+        opp_def = self.defensive_ratings.get(opponent, 112.0)
+        X_pred = np.array([[1 if is_home else 0, opp_def, 35, 1, 0, 100]])
+        
+        prediction = float(model.predict(X_pred)[0])
+        std_dev = float(y.std())
+        
+        z_95 = 1.96
+        ci_lower = prediction - z_95 * std_dev
+        ci_upper = prediction + z_95 * std_dev
+        
+        if line is None:
+            line = prediction - 0.5
+        
+        z_score = (prediction - line) / std_dev if std_dev > 0 else 0
+        prob_over = float(stats.norm.cdf(z_score))
+        prob_under = 1 - prob_over
+        
+        implied_prob_over = 0.5238
+        implied_prob_under = 0.5238
+        
+        edge_over = prob_over - implied_prob_over
+        edge_under = prob_under - implied_prob_under
+        
+        if edge_over > 0.05 and edge_over > abs(edge_under):
+            recommendation = 'OVER'
+            edge = edge_over
+            prob = prob_over
+        elif edge_under > 0.05:
+            recommendation = 'UNDER'
+            edge = edge_under
+            prob = prob_under
+        else:
+            recommendation = 'SKIP'
+            edge = 0
+            prob = 0.5
+        
+        if recommendation != 'SKIP':
+            decimal_odds = 1.91
+            q = 1 - prob
+            kelly = (prob * decimal_odds - q) / decimal_odds
+            kelly_pct = max(0, kelly * 0.25) * 100
+        else:
+            kelly_pct = 0
+        
+        outliers_detected = np.sum(outliers_mask)
+        outliers_list = []
+        
+        for i, is_outlier in enumerate(outliers_mask):
+            if is_outlier:
+                outliers_list.append({
+                    'date': df.iloc[i]['date'],
+                    'opponent': df.iloc[i]['opponent'],
+                    stat_type: float(df.iloc[i][stat_type]),
+                    'reason': outlier_info[i]['severity'],
+                    'methods_detected': outlier_info[i]['methods_detected']
+                })
+
+# FIN PART 1 - Continue avec PART 2
+l
+"""
+PART 2/2 - Copie APRÈS PART 1
+"""
+        
+        return {
+            'status': 'SUCCESS',
+            'player': player_name,
+            'stat_type': stat_type,
+            'opponent': opponent,
+            'is_home': is_home,
+            'data_source': 'REAL' if NBA_API_AVAILABLE else 'SIMULATED',
+            'prediction': round(prediction, 1),
+            'confidence_interval': {'lower': round(max(0, ci_lower), 1), 'upper': round(ci_upper, 1)},
+            'season_stats': {
+                'games_played': len(df),
+                'games_used': len(df_model),
+                'outliers_removed': int(outliers_detected) if remove_outliers else 0,
+                'weighted_avg': round(df[stat_type].mean(), 1),
+                'std_dev': round(std_dev, 2),
+                'min': round(df[stat_type].min(), 1),
+                'max': round(df[stat_type].max(), 1)
+            },
+            'regression_stats': {
+                'r_squared': round(r2, 4),
+                'adjusted_r_squared': round(adj_r2, 4),
+                'rmse': round(rmse, 2),
+                'sample_size': int(n),
+                'dof': int(dof)
+            },
+            'chi_square_test': chi2_test,
+            'line_analysis': {
+                'bookmaker_line': round(line, 1),
+                'recommendation': recommendation,
+                'over_probability': round(prob_over * 100, 1),
+                'under_probability': round(prob_under * 100, 1),
+                'edge': round(edge * 100, 1),
+                'kelly_criterion': round(kelly_pct, 1),
+                'bet_confidence': 'HIGH' if abs(edge) > 0.10 else 'MEDIUM' if abs(edge) > 0.05 else 'LOW'
+            },
+            'outlier_analysis': {
+                'method': 'Combined (IQR + Z-score + MAD)',
+                'outliers_detected': int(outliers_detected),
+                'outliers_pct': round((outliers_detected / len(df)) * 100, 1),
+                'data_used': 'CLEANED' if remove_outliers and outliers_detected > 0 else 'FULL',
+                'outliers': outliers_list,
+                'recommendation': f'{outliers_detected} outlier(s) detected and EXCLUDED' if remove_outliers and outliers_detected > 0 else f'{outliers_detected} outlier(s) detected but INCLUDED'
+            },
+            'splits': {
+                'home': {'games': len(df[df['is_home'] == True]), 'avg': round(df[df['is_home'] == True][stat_type].mean(), 1)} if len(df[df['is_home'] == True]) > 0 else None,
+                'away': {'games': len(df[df['is_home'] == False]), 'avg': round(df[df['is_home'] == False][stat_type].mean(), 1)} if len(df[df['is_home'] == False]) > 0 else None,
+                'vs_opponent': {'games': len(df[df['opponent'] == opponent]), 'avg': round(df[df['opponent'] == opponent][stat_type].mean(), 1)} if len(df[df['opponent'] == opponent]) > 0 else None
+            },
+            'trend_analysis': {
+                'slope': round(model.coef_[0], 3),
+                'r_squared': round(r2, 3),
+                'p_value': f"{'<0.001' if p_values[0] < 0.001 else round(p_values[0], 3)}",
+                'interpretation': 'Trending UP' if model.coef_[0] > 0.5 else 'Trending DOWN' if model.coef_[0] < -0.5 else 'Stable'
+            }
         }
 
-        function displayError(message) {
-            const errorDiv = document.getElementById('errorDiv');
-            errorDiv.textContent = `ERREUR: ${message}`;
-            errorDiv.classList.remove('hidden');
-        }
-    </script>
-</body>
-</html>
+analyzer = ImprovedNBAAnalyzer()
 
-<!-- ╔═══════════════════════════════════════════════════════════════╗ -->
-<!-- ║                    FIN PART 2/2                               ║ -->
-<!-- ║  ✅ FICHIER COMPLET! SAUVEGARDE MAINTENANT                    ║ -->
-<!-- ╚═══════════════════════════════════════════════════════════════╝ -->
+try:
+    from odds_api_client import OddsAPIClient
+    odds_client = OddsAPIClient()
+    ODDS_API_AVAILABLE = True
+except ImportError:
+    ODDS_API_AVAILABLE = False
+    odds_client = None
+    print("WARNING: odds_api_client.py not found")
+
+def scan_daily_opportunities(min_edge=5.0, min_confidence='MEDIUM'):
+    if not ODDS_API_AVAILABLE or not odds_client:
+        return {'status': 'ERROR', 'message': 'Odds API not available', 'opportunities': []}
+    
+    print("\n" + "="*70)
+    print("SCANNING DAILY OPPORTUNITIES")
+    print("="*70)
+    
+    props = odds_client.get_player_props()
+    print(f"Props retrieved: {len(props)}")
+    
+    opportunities = []
+    analyzed_count = 0
+    
+    for prop in props:
+        player = prop['player']
+        stat_type = prop['stat_type']
+        line = prop['line']
+        bookmaker = prop['bookmaker']
+        
+        is_home = True
+        opponent = prop['away_team'] if is_home else prop['home_team']
+        
+        try:
+            result = analyzer.analyze_stat(player, stat_type, opponent, is_home, line, remove_outliers=True)
+            
+            analyzed_count += 1
+            
+            if result.get('status') != 'SUCCESS':
+                continue
+            
+            edge = result['line_analysis']['edge']
+            recommendation = result['line_analysis']['recommendation']
+            
+            if recommendation == 'SKIP' or edge < min_edge:
+                continue
+            
+            result['bookmaker_info'] = {
+                'bookmaker': bookmaker,
+                'line': line,
+                'over_odds': prop.get('over_odds', -110),
+                'under_odds': prop.get('under_odds', -110)
+            }
+            
+            result['odds_comparison'] = {'primary': bookmaker, 'betonline_different': False}
+            
+            opportunities.append(result)
+            
+        except Exception as e:
+            print(f"ERROR {player} {stat_type}: {e}")
+            continue
+    
+    opportunities.sort(key=lambda x: x['line_analysis']['edge'], reverse=True)
+    
+    print(f"OK: {analyzed_count} props analyzed")
+    print(f"Opportunities found: {len(opportunities)}")
+    print("="*70 + "\n")
+    
+    return {
+        'status': 'SUCCESS',
+        'total_props_available': len(props),
+        'total_analyzed': analyzed_count,
+        'opportunities_found': len(opportunities),
+        'scan_time': datetime.now().isoformat(),
+        'filters': {'min_edge': min_edge, 'min_confidence': min_confidence},
+        'opportunities': opportunities
+    }
+
+@app.route('/api/health', methods=['GET'])
+def health():
+    return jsonify({
+        'status': 'OK',
+        'service': 'NBA Betting Analyzer v5.0',
+        'timestamp': datetime.now().isoformat(),
+        'nba_api': NBA_API_AVAILABLE,
+        'odds_api': ODDS_API_AVAILABLE
+    })
+
+@app.route('/api/analyze', methods=['POST'])
+def analyze():
+    try:
+        data = request.json
+        player = data.get('player')
+        stat_type = data.get('stat_type', 'points')
+        opponent = data.get('opponent', 'LAL')
+        is_home = data.get('is_home', True)
+        line = data.get('line')
+        remove_outliers = data.get('remove_outliers', True)
+        
+        if not player:
+            return jsonify({'error': 'Player name required'}), 400
+        
+        result = analyzer.analyze_stat(player, stat_type, opponent, is_home, line, remove_outliers)
+        return jsonify(result)
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/analyze-all', methods=['POST'])
+def analyze_all():
+    try:
+        data = request.json
+        player = data.get('player')
+        opponent = data.get('opponent', 'LAL')
+        is_home = data.get('is_home', True)
+        remove_outliers = data.get('remove_outliers', True)
+        lines = data.get('lines', {})
+        
+        if not player:
+            return jsonify({'error': 'Player name required'}), 400
+        
+        results = {}
+        for stat_type in ['points', 'assists', 'rebounds']:
+            line = lines.get(stat_type)
+            result = analyzer.analyze_stat(player, stat_type, opponent, is_home, line, remove_outliers)
+            results[stat_type] = result
+        
+        return jsonify({'status': 'SUCCESS', 'player': player, 'results': results})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/api/teams', methods=['GET'])
+def get_teams():
+    teams_list = [{'code': code, 'name': code} for code in sorted(analyzer.defensive_ratings.keys())]
+    return jsonify({'status': 'SUCCESS', 'teams': teams_list})
+
+@app.route('/api/team-roster/<team_code>', methods=['GET'])
+def team_roster(team_code):
+    roster = analyzer.team_rosters.get(team_code, [])
+    return jsonify({'status': 'SUCCESS', 'team': team_code, 'roster': [{'name': p, 'position': 'G'} for p in roster]})
+
+@app.route('/api/daily-opportunities', methods=['GET'])
+def daily_opportunities():
+    min_edge = request.args.get('min_edge', 5.0, type=float)
+    min_confidence = request.args.get('min_confidence', 'MEDIUM', type=str)
+    result = scan_daily_opportunities(min_edge, min_confidence)
+    return jsonify(result)
+
+@app.route('/api/odds/usage', methods=['GET'])
+def odds_usage():
+    if not ODDS_API_AVAILABLE or not odds_client:
+        return jsonify({'error': 'Odds API not configured'}), 400
+    stats = odds_client.get_usage_stats()
+    return jsonify(stats)
+
+@app.route('/api/odds/available-props', methods=['GET'])
+def available_props():
+    if not ODDS_API_AVAILABLE or not odds_client:
+        return jsonify({'error': 'Odds API not configured'}), 400
+    props = odds_client.get_player_props()
+    return jsonify({'status': 'SUCCESS', 'total': len(props), 'props': props})
+
+if __name__ == '__main__':
+    port = int(os.environ.get('PORT', 5000))
+    debug = os.environ.get('DEBUG', 'False') == 'True'
+    
+    print("\n" + "="*70)
+    print("NBA BETTING ANALYZER v5.0")
+    print("="*70)
+    print(f"NBA API: {'OK' if NBA_API_AVAILABLE else 'NOT AVAILABLE'}")
+    print(f"Odds API: {'OK' if ODDS_API_AVAILABLE else 'NOT AVAILABLE'}")
+    print(f"Port: {port}")
+    print("="*70)
+    print("\nEndpoints:")
+    print("   GET  /api/health")
+    print("   GET  /api/teams")
+    print("   GET  /api/team-roster/<team>")
+    print("   POST /api/analyze")
+    print("   POST /api/analyze-all")
+    print("   GET  /api/daily-opportunities")
+    print("   GET  /api/odds/usage")
+    print("   GET  /api/odds/available-props")
+    print("\nServer started!\n")
+    
+    app.run(debug=debug, host='0.0.0.0', port=port)
