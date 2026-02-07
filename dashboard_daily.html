@@ -71,6 +71,7 @@
             display: flex;
             gap: 20px;
             align-items: center;
+            flex-wrap: wrap;
         }
 
         .filter-group {
@@ -101,6 +102,7 @@
             font-weight: 700;
             cursor: pointer;
             font-size: 1.05em;
+            transition: all 0.3s;
         }
 
         .btn-scan:hover {
@@ -136,6 +138,48 @@
             font-size: 2em;
             font-weight: 800;
             color: #667eea;
+        }
+
+        .day-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            background: white;
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+        }
+
+        .day-tab {
+            flex: 1;
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+            cursor: pointer;
+            background: #f8f9fa;
+            border: 2px solid transparent;
+            transition: all 0.3s;
+        }
+
+        .day-tab:hover {
+            background: #e9ecef;
+        }
+
+        .day-tab.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            font-weight: 700;
+        }
+
+        .day-tab-date {
+            font-size: 1.2em;
+            font-weight: 700;
+            margin-bottom: 5px;
+        }
+
+        .day-tab-count {
+            font-size: 0.9em;
+            opacity: 0.8;
         }
 
         .opportunities-grid {
@@ -190,6 +234,15 @@
         .opp-badge.under {
             background: #fee2e2;
             color: #991b1b;
+        }
+
+        .game-info-box {
+            background: #e0f2fe;
+            padding: 10px 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            font-size: 0.9em;
+            border-left: 3px solid #0ea5e9;
         }
 
         .opp-prediction {
@@ -294,6 +347,7 @@
             cursor: pointer;
             font-weight: 600;
             color: #667eea;
+            transition: all 0.3s;
         }
 
         .expand-btn:hover {
@@ -402,6 +456,14 @@
                     <option value="HIGH">Haute uniquement</option>
                 </select>
             </div>
+            
+            <div class="filter-group">
+                <label>Période:</label>
+                <select id="daysToScan">
+                    <option value="1">Aujourd'hui</option>
+                    <option value="2" selected>2 jours</option>
+                </select>
+            </div>
 
             <button class="btn-scan" onclick="scanOpportunities()">
                 🔍 Scanner les opportunités
@@ -435,6 +497,8 @@
             </div>
         </div>
 
+        <div id="dayTabs" class="day-tabs hidden"></div>
+
         <div id="loadingDiv" class="loading hidden">
             <div class="spinner"></div>
             <h3>Scan en cours...</h3>
@@ -454,6 +518,7 @@
 
     <script>
         const API_URL = 'https://nba-betting-1.onrender.com';
+        let currentData = null;
 
         // Update time/date
         function updateTime() {
@@ -488,16 +553,18 @@
         async function scanOpportunities() {
             const minEdge = document.getElementById('minEdge').value;
             const minConfidence = document.getElementById('minConfidence').value;
+            const days = document.getElementById('daysToScan').value;
 
             document.getElementById('loadingDiv').classList.remove('hidden');
             document.getElementById('statsBar').classList.add('hidden');
             document.getElementById('resultsDiv').classList.add('hidden');
+            document.getElementById('dayTabs').classList.add('hidden');
             document.getElementById('emptyDiv').classList.add('hidden');
             document.getElementById('errorDiv').classList.add('hidden');
 
             try {
                 const response = await fetch(
-                    `${API_URL}/api/daily-opportunities?min_edge=${minEdge}&min_confidence=${minConfidence}`
+                    `${API_URL}/api/daily-opportunities?min_edge=${minEdge}&min_confidence=${minConfidence}&days=${days}`
                 );
 
                 if (!response.ok) {
@@ -520,6 +587,8 @@
         }
 
         function displayResults(data) {
+            currentData = data;
+            
             // Update stats bar
             document.getElementById('statsBar').classList.remove('hidden');
             document.getElementById('totalProps').textContent = data.total_props_available;
@@ -539,15 +608,64 @@
                 hour: '2-digit', minute: '2-digit'
             });
 
-            // Display opportunities
             if (data.opportunities_found === 0) {
                 document.getElementById('emptyDiv').classList.remove('hidden');
                 document.getElementById('emptyEdge').textContent = data.filters.min_edge;
                 return;
             }
 
+            // Create day tabs
+            const opportunitiesByDate = data.opportunities_by_date || {};
+            const dates = Object.keys(opportunitiesByDate).sort();
+            
+            if (dates.length > 1) {
+                const tabsDiv = document.getElementById('dayTabs');
+                tabsDiv.innerHTML = '';
+                
+                dates.forEach((date, index) => {
+                    const count = opportunitiesByDate[date].length;
+                    const dateObj = new Date(date);
+                    const isToday = dateObj.toDateString() === new Date().toDateString();
+                    const isTomorrow = dateObj.toDateString() === new Date(Date.now() + 86400000).toDateString();
+                    
+                    let dayLabel = dateObj.toLocaleDateString('fr-FR', { 
+                        weekday: 'long', day: 'numeric', month: 'long' 
+                    });
+                    
+                    if (isToday) dayLabel = "Aujourd'hui";
+                    if (isTomorrow) dayLabel = "Demain";
+                    
+                    const tab = document.createElement('div');
+                    tab.className = `day-tab ${index === 0 ? 'active' : ''}`;
+                    tab.onclick = () => showDay(date);
+                    tab.innerHTML = `
+                        <div class="day-tab-date">${dayLabel}</div>
+                        <div class="day-tab-count">${count} opportunité(s)</div>
+                    `;
+                    tabsDiv.appendChild(tab);
+                });
+                
+                tabsDiv.classList.remove('hidden');
+            }
+            
+            if (dates.length > 0) {
+                showDay(dates[0]);
+            }
+        }
+
+        function showDay(date) {
+            if (!currentData) return;
+            
+            // Update active tab
+            document.querySelectorAll('.day-tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            
+            // Show opportunities for the day
+            const opportunities = currentData.opportunities_by_date[date] || [];
+            
             const resultsDiv = document.getElementById('resultsDiv');
-            resultsDiv.innerHTML = data.opportunities.map(opp => createOpportunityCard(opp)).join('');
+            resultsDiv.innerHTML = opportunities.map(opp => createOpportunityCard(opp)).join('');
             resultsDiv.classList.remove('hidden');
         }
 
@@ -555,81 +673,4 @@
             const rec = opp.line_analysis.recommendation;
             const recClass = rec.toLowerCase();
             const edge = opp.line_analysis.edge;
-            const kelly = opp.line_analysis.kelly_criterion;
-
-            const statLabel = {
-                'points': 'Points',
-                'assists': 'Assists',
-                'rebounds': 'Rebounds'
-            }[opp.stat_type];
-
-            const bookmaker = opp.bookmaker_info.bookmaker.toUpperCase();
-            const odds = rec === 'OVER' ? opp.bookmaker_info.over_odds : opp.bookmaker_info.under_odds;
-
-            return `
-                <div class="opp-card ${recClass}">
-                    <div class="opp-header">
-                        <div>
-                            <div class="opp-player">${opp.player}</div>
-                            <div class="opp-matchup">
-                                ${opp.is_home ? 'vs' : '@'} ${opp.opponent} • ${statLabel}
-                            </div>
-                        </div>
-                        <div class="opp-badge ${recClass}">
-                            ${rec} ${opp.line_analysis.bookmaker_line}
-                        </div>
-                    </div>
-
-                    <div class="opp-prediction">
-                        <div class="pred-main">
-                            <div>
-                                <div style="font-size: 0.9em; color: #666; margin-bottom: 5px;">
-                                    Prédiction modèle
-                                </div>
-                                <div class="pred-value">${opp.prediction}</div>
-                            </div>
-                            <div class="pred-vs">
-                                <div class="pred-vs-label">vs Ligne</div>
-                                <div class="pred-vs-value">${opp.line_analysis.bookmaker_line}</div>
-                            </div>
-                        </div>
-
-                        <div class="metrics-grid">
-                            <div class="metric">
-                                <div class="metric-label">Edge</div>
-                                <div class="metric-value positive">+${edge.toFixed(1)}%</div>
-                            </div>
-                            <div class="metric">
-                                <div class="metric-label">Probabilité</div>
-                                <div class="metric-value">${opp.line_analysis[rec.toLowerCase() + '_probability']}%</div>
-                            </div>
-                            <div class="metric">
-                                <div class="metric-label">Kelly</div>
-                                <div class="metric-value">${kelly.toFixed(1)}%</div>
-                            </div>
-                            <div class="metric">
-                                <div class="metric-label">Confiance</div>
-                                <div class="metric-value">${opp.line_analysis.bet_confidence}</div>
-                            </div>
-                            <div class="metric">
-                                <div class="metric-label">σ (Écart-type)</div>
-                                <div class="metric-value">${opp.season_stats.std_dev}</div>
-                            </div>
-                            <div class="metric">
-                                <div class="metric-label">R²</div>
-                                <div class="metric-value">${opp.regression_stats.r_squared}</div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="odds-comparison">
-                        <div class="odds-row">
-                            <span class="odds-label">📊 Bookmaker:</span>
-                            <span class="odds-value">${bookmaker}</span>
-                        </div>
-                        <div class="odds-row">
-                            <span class="odds-label">💰 Cote ${rec}:</span>
-                            <span class="odds-value">${odds > 0 ? '+' : ''}${odds}</span>
-                        </div>
-                        <div class="odds-row">
-                            <span class="odds
+ 
