@@ -1,279 +1,857 @@
-# DASHBOARD MODIFICATION - PART 1/2
-
-## DANS dashboard_daily.html
-
-## 1. CHERCHE <div class="filters"> ET REMPLACE PAR:
-
-```html
-<div class="filters">
-    <div class="filter-group">
-        <label>Edge minimum:</label>
-        <input type="number" id="minEdge" value="5" min="0" max="20" step="0.5">
-        <span>%</span>
-    </div>
-
-    <div class="filter-group">
-        <label>Confiance:</label>
-        <select id="minConfidence">
-            <option value="LOW">Toutes</option>
-            <option value="MEDIUM" selected>Moyenne+</option>
-            <option value="HIGH">Haute uniquement</option>
-        </select>
-    </div>
-    
-    <!-- NOUVEAU: Sélecteur jours -->
-    <div class="filter-group">
-        <label>Période:</label>
-        <select id="daysToScan">
-            <option value="1">Aujourd'hui</option>
-            <option value="2" selected>2 jours</option>
-        </select>
-    </div>
-
-    <button class="btn-scan" onclick="scanOpportunities()">
-        Scanner les opportunités
-    </button>
-
-    <div style="margin-left: auto;">
-        <small id="apiUsage" style="color: #666;">API: --/--</small>
-    </div>
-</div>
-```
-
----
-
-## 2. APRÈS <div id="statsBar"...> AJOUTE:
-
-```html
-<div id="dayTabs" class="day-tabs hidden"></div>
-```
-
----
-
-## 3. DANS LA SECTION <style>, AJOUTE:
-
-```css
-.day-tabs {
-    display: flex;
-    gap: 10px;
-    margin-bottom: 20px;
-    background: white;
-    padding: 20px;
-    border-radius: 15px;
-    box-shadow: 0 8px 20px rgba(0,0,0,0.15);
-}
-
-.day-tab {
-    flex: 1;
-    padding: 15px;
-    border-radius: 10px;
-    text-align: center;
-    cursor: pointer;
-    background: #f8f9fa;
-    border: 2px solid transparent;
-    transition: all 0.3s;
-}
-
-.day-tab:hover {
-    background: #e9ecef;
-}
-
-.day-tab.active {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    font-weight: 700;
-}
-
-.day-tab-date {
-    font-size: 1.2em;
-    font-weight: 700;
-    margin-bottom: 5px;
-}
-
-.day-tab-count {
-    font-size: 0.9em;
-    opacity: 0.8;
-}
-```
-
-Continue avec PART 2 pour le JavaScript
-
-# DASHBOARD MODIFICATION - PART 2/2 (JAVASCRIPT)
-
-## 4. CHERCHE LA FONCTION scanOpportunities() EN JAVASCRIPT
-
-## REMPLACE PAR:
-
-```javascript
-let currentData = null;  // AJOUTE CETTE VARIABLE GLOBALE
-
-async function scanOpportunities() {
-    const minEdge = document.getElementById('minEdge').value;
-    const minConfidence = document.getElementById('minConfidence').value;
-    const days = document.getElementById('daysToScan').value;  // NOUVEAU
-
-    document.getElementById('loadingDiv').classList.remove('hidden');
-    document.getElementById('statsBar').classList.add('hidden');
-    document.getElementById('resultsDiv').classList.add('hidden');
-    document.getElementById('dayTabs').classList.add('hidden');
-    document.getElementById('emptyDiv').classList.add('hidden');
-    document.getElementById('errorDiv').classList.add('hidden');
-
-    try {
-        const response = await fetch(
-            `${API_URL}/api/daily-opportunities?min_edge=${minEdge}&min_confidence=${minConfidence}&days=${days}`
-        );
-
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
+<!DOCTYPE html>
+<html lang="fr">
+<!-- 
+╔═══════════════════════════════════════════════════════════════╗
+║  DASHBOARD_DAILY.HTML - PART 1/2                             ║
+║                                                               ║
+║  📋 INSTRUCTIONS:                                             ║
+║  1. Télécharge PART1 et PART2                                 ║
+║  2. Copie TOUT le contenu de PART1                            ║
+║  3. Copie TOUT le contenu de PART2 EN DESSOUS                 ║
+║  4. Sauvegarde comme "dashboard_daily.html"                   ║
+╚═══════════════════════════════════════════════════════════════╝
+-->
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Morning Brief - NBA Betting</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
         }
 
-        const data = await response.json();
-
-        if (data.status === 'SUCCESS') {
-            displayResults(data);
-        } else {
-            displayError(data.message || 'Erreur');
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
         }
-    } catch (error) {
-        displayError(`Erreur: ${error.message}`);
-    } finally {
-        document.getElementById('loadingDiv').classList.add('hidden');
-        loadAPIUsage();
-    }
-}
-```
 
----
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
 
-## 5. REMPLACE LA FONCTION displayResults():
+        .header {
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
 
-```javascript
-function displayResults(data) {
-    currentData = data;  // STOCKE LES DONNÉES
-    
-    // Update stats
-    document.getElementById('statsBar').classList.remove('hidden');
-    document.getElementById('totalProps').textContent = data.total_props_available;
-    document.getElementById('analyzedProps').textContent = data.total_analyzed;
-    document.getElementById('foundOpps').textContent = data.opportunities_found;
-    
-    if (data.opportunities_found > 0) {
-        const avgEdge = data.opportunities.reduce((sum, o) => 
-            sum + o.line_analysis.edge, 0) / data.opportunities_found;
-        document.getElementById('avgEdge').textContent = avgEdge.toFixed(1) + '%';
-    } else {
-        document.getElementById('avgEdge').textContent = '-';
-    }
+        .header-left h1 {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-size: 2.5em;
+            margin-bottom: 5px;
+        }
 
-    const scanTime = new Date(data.scan_time);
-    document.getElementById('scanTime').textContent = scanTime.toLocaleTimeString('fr-FR', {
-        hour: '2-digit', minute: '2-digit'
-    });
+        .header-left p {
+            color: #666;
+            font-size: 1.1em;
+        }
 
-    if (data.opportunities_found === 0) {
-        document.getElementById('emptyDiv').classList.remove('hidden');
-        document.getElementById('emptyEdge').textContent = data.filters.min_edge;
-        return;
-    }
+        .header-right {
+            text-align: right;
+        }
 
-    // Crée onglets par jour
-    const opportunitiesByDate = data.opportunities_by_date || {};
-    const dates = Object.keys(opportunitiesByDate).sort();
-    
-    if (dates.length > 1) {
-        const tabsDiv = document.getElementById('dayTabs');
-        tabsDiv.innerHTML = '';
-        
-        dates.forEach((date, index) => {
-            const count = opportunitiesByDate[date].length;
-            const dateObj = new Date(date);
-            const isToday = dateObj.toDateString() === new Date().toDateString();
-            const isTomorrow = dateObj.toDateString() === new Date(Date.now() + 86400000).toDateString();
+        .time {
+            font-size: 2em;
+            font-weight: 700;
+            color: #667eea;
+        }
+
+        .date {
+            color: #666;
+            margin-top: 5px;
+        }
+
+        .filters {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+
+        .filter-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .filter-group label {
+            font-weight: 600;
+            color: #333;
+        }
+
+        .filter-group select,
+        .filter-group input {
+            padding: 8px 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 0.95em;
+        }
+
+        .btn-scan {
+            padding: 12px 30px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-weight: 700;
+            cursor: pointer;
+            font-size: 1.05em;
+            transition: all 0.3s;
+        }
+
+        .btn-scan:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(102,126,234,0.4);
+        }
+
+        .stats-bar {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 15px;
+        }
+
+        .stat-box {
+            text-align: center;
+            padding: 15px;
+            border-radius: 10px;
+            background: #f8f9fa;
+        }
+
+        .stat-label {
+            font-size: 0.85em;
+            color: #666;
+            margin-bottom: 5px;
+        }
+
+        .stat-value {
+            font-size: 2em;
+            font-weight: 800;
+            color: #667eea;
+        }
+
+        .day-tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            background: white;
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+        }
+
+        .day-tab {
+            flex: 1;
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+            cursor: pointer;
+            background: #f8f9fa;
+            border: 2px solid transparent;
+            transition: all 0.3s;
+        }
+
+        .day-tab:hover {
+            background: #e9ecef;
+        }
+
+        .day-tab.active {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            font-weight: 700;
+        }
+
+        .day-tab-date {
+            font-size: 1.2em;
+            font-weight: 700;
+            margin-bottom: 5px;
+        }
+
+        .day-tab-count {
+            font-size: 0.9em;
+            opacity: 0.8;
+        }
+
+        .opportunities-grid {
+            display: grid;
+            gap: 20px;
+        }
+
+        .opp-card {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+            position: relative;
+            border-left: 6px solid #10b981;
+        }
+
+        .opp-card.under {
+            border-left-color: #ef4444;
+        }
+
+        .opp-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: start;
+            margin-bottom: 20px;
+        }
+
+        .opp-player {
+            font-size: 1.5em;
+            font-weight: 800;
+            color: #333;
+            margin-bottom: 5px;
+        }
+
+        .opp-matchup {
+            color: #666;
+            font-size: 1em;
+        }
+
+        .opp-badge {
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-weight: 700;
+            font-size: 0.95em;
+        }
+
+        .opp-badge.over {
+            background: #d1fae5;
+            color: #065f46;
+        }
+
+        .opp-badge.under {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .game-info-box {
+            background: #e0f2fe;
+            padding: 10px 15px;
+            border-radius: 8px;
+            margin-bottom: 15px;
+            font-size: 0.9em;
+            border-left: 3px solid #0ea5e9;
+        }
+
+        .opp-prediction {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+        }
+
+        .pred-main {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .pred-value {
+            font-size: 2.5em;
+            font-weight: 800;
+            color: #667eea;
+        }
+
+        .pred-vs {
+            text-align: right;
+        }
+
+        .pred-vs-label {
+            font-size: 0.9em;
+            color: #666;
+        }
+
+        .pred-vs-value {
+            font-size: 1.8em;
+            font-weight: 700;
+            color: #333;
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 12px;
+        }
+
+        .metric {
+            background: white;
+            padding: 12px;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .metric-label {
+            font-size: 0.85em;
+            color: #666;
+            margin-bottom: 4px;
+        }
+
+        .metric-value {
+            font-size: 1.3em;
+            font-weight: 700;
+            color: #333;
+        }
+
+        .metric-value.positive {
+            color: #10b981;
+        }
+
+        .metric-value.negative {
+            color: #ef4444;
+        }
+
+        .odds-comparison {
+            background: #e0f2fe;
+            padding: 15px;
+            border-radius: 10px;
+            margin-top: 15px;
+            border: 2px solid #0ea5e9;
+        }
+
+        .odds-row {
+            display: flex;
+            justify-content: space-between;
+            margin: 8px 0;
+        }
+
+        .odds-label {
+            font-weight: 600;
+            color: #0369a1;
+        }
+
+        .odds-value {
+            font-weight: 700;
+            color: #0c4a6e;
+        }
+
+        .expand-btn {
+            margin-top: 15px;
+            padding: 10px;
+            background: #f8f9fa;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            width: 100%;
+            cursor: pointer;
+            font-weight: 600;
+            color: #667eea;
+            transition: all 0.3s;
+        }
+
+        .expand-btn:hover {
+            background: #667eea;
+            color: white;
+        }
+
+        .expanded-stats {
+            display: none;
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 2px solid #e0e0e0;
+        }
+
+        .expanded-stats.show {
+            display: block;
+        }
+
+        .stat-section {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 15px;
+        }
+
+        .stat-section h4 {
+            color: #667eea;
+            margin-bottom: 12px;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 60px;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+        }
+
+        .spinner {
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid #667eea;
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .error {
+            background: #fee2e2;
+            border: 3px solid #fca5a5;
+            color: #991b1b;
+            padding: 25px;
+            border-radius: 15px;
+            text-align: center;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 60px;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+        }
+
+        .empty-state h3 {
+            color: #667eea;
+            margin-bottom: 15px;
+        }
+
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="header-left">
+                <h1>☕ Morning Brief</h1>
+                <p>Opportunités NBA du jour</p>
+            </div>
+            <div class="header-right">
+                <div class="time" id="currentTime">--:--</div>
+                <div class="date" id="currentDate">Chargement...</div>
+            </div>
+        </div>
+
+        <div class="filters">
+            <div class="filter-group">
+                <label>Edge minimum:</label>
+                <input type="number" id="minEdge" value="5" min="0" max="20" step="0.5">
+                <span>%</span>
+            </div>
+
+            <div class="filter-group">
+                <label>Confiance:</label>
+                <select id="minConfidence">
+                    <option value="LOW">Toutes</option>
+                    <option value="MEDIUM" selected>Moyenne+</option>
+                    <option value="HIGH">Haute uniquement</option>
+                </select>
+            </div>
             
-            let dayLabel = dateObj.toLocaleDateString('fr-FR', { 
-                weekday: 'long', day: 'numeric', month: 'long' 
+            <div class="filter-group">
+                <label>Période:</label>
+                <select id="daysToScan">
+                    <option value="1">Aujourd'hui</option>
+                    <option value="2" selected>2 jours</option>
+                </select>
+            </div>
+
+            <button class="btn-scan" onclick="scanOpportunities()">
+                🔍 Scanner les opportunités
+            </button>
+
+            <div style="margin-left: auto;">
+                <small id="apiUsage" style="color: #666;">API: --/--</small>
+            </div>
+        </div>
+
+        <div id="statsBar" class="stats-bar hidden">
+            <div class="stat-box">
+                <div class="stat-label">Props disponibles</div>
+                <div class="stat-value" id="totalProps">-</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-label">Props analysées</div>
+                <div class="stat-value" id="analyzedProps">-</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-label">Opportunités</div>
+                <div class="stat-value" id="foundOpps">-</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-label">Edge moyen</div>
+                <div class="stat-value" id="avgEdge">-</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-label">Scan</div>
+                <div class="stat-value" id="scanTime" style="font-size: 1.2em;">-</div>
+            </div>
+        </div>
+
+        <div id="dayTabs" class="day-tabs hidden"></div>
+
+        <div id="loadingDiv" class="loading hidden">
+            <div class="spinner"></div>
+            <h3>Scan en cours...</h3>
+            <p>Analyse des props NBA du jour</p>
+        </div>
+
+        <div id="resultsDiv" class="opportunities-grid hidden"></div>
+
+        <div id="emptyDiv" class="empty-state hidden">
+            <h3>🎯 Aucune opportunité trouvée</h3>
+            <p>Aucun pari ne correspond aux critères (edge ≥ <span id="emptyEdge">5</span>%)</p>
+            <p style="margin-top: 15px; color: #666;">Essaye de réduire l'edge minimum ou attends les matchs du soir.</p>
+        </div>
+
+        <div id="errorDiv" class="error hidden"></div>
+    </div>
+
+<!-- ╔═══════════════════════════════════════════════════════════════╗ -->
+<!-- ║                    FIN PART 1/2                               ║ -->
+<!-- ║  ⚠️  OUVRE dashboard_daily_PART2.html ET COPIE EN DESSOUS     ║ -->
+<!-- ╚═══════════════════════════════════════════════════════════════╝ -->
+
+
+    <!-- 
+╔═══════════════════════════════════════════════════════════════╗
+║  DASHBOARD_DAILY.HTML - PART 2/2                             ║
+║                                                               ║
+║  ⚠️ CE FICHIER COMMENCE AU MILIEU DU CODE!                   ║
+║                                                               ║
+║  📋 INSTRUCTIONS:                                             ║
+║  1. Ouvre dashboard_daily_PART1.html                          ║
+║  2. Copie TOUT son contenu                                    ║
+║  3. Copie TOUT le contenu ci-dessous EN DESSOUS               ║
+║  4. Sauvegarde comme "dashboard_daily.html"                   ║
+╚═══════════════════════════════════════════════════════════════╝
+-->
+
+    <script>
+        const API_URL = 'https://nba-betting-1.onrender.com';
+        let currentData = null;
+
+        // Update time/date
+        function updateTime() {
+            const now = new Date();
+            document.getElementById('currentTime').textContent = now.toLocaleTimeString('fr-FR', {
+                hour: '2-digit',
+                minute: '2-digit'
+            });
+            document.getElementById('currentDate').textContent = now.toLocaleDateString('fr-FR', {
+                weekday: 'long',
+                day: 'numeric',
+                month: 'long',
+                year: 'numeric'
+            });
+        }
+        updateTime();
+        setInterval(updateTime, 30000);
+
+        // Load API usage
+        async function loadAPIUsage() {
+            try {
+                const response = await fetch(`${API_URL}/api/odds/usage`);
+                const data = await response.json();
+                document.getElementById('apiUsage').textContent = 
+                    `API: ${data.used}/${data.remaining || 500}`;
+            } catch (e) {
+                console.error('Erreur usage:', e);
+            }
+        }
+        loadAPIUsage();
+
+        async function scanOpportunities() {
+            const minEdge = document.getElementById('minEdge').value;
+            const minConfidence = document.getElementById('minConfidence').value;
+            const days = document.getElementById('daysToScan').value;
+
+            document.getElementById('loadingDiv').classList.remove('hidden');
+            document.getElementById('statsBar').classList.add('hidden');
+            document.getElementById('resultsDiv').classList.add('hidden');
+            document.getElementById('dayTabs').classList.add('hidden');
+            document.getElementById('emptyDiv').classList.add('hidden');
+            document.getElementById('errorDiv').classList.add('hidden');
+
+            try {
+                const response = await fetch(
+                    `${API_URL}/api/daily-opportunities?min_edge=${minEdge}&min_confidence=${minConfidence}&days=${days}`
+                );
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+
+                const data = await response.json();
+
+                if (data.status === 'SUCCESS') {
+                    displayResults(data);
+                } else {
+                    displayError(data.message || 'Erreur inconnue');
+                }
+            } catch (error) {
+                displayError(`Impossible de scanner: ${error.message}`);
+            } finally {
+                document.getElementById('loadingDiv').classList.add('hidden');
+                loadAPIUsage();
+            }
+        }
+
+        function displayResults(data) {
+            currentData = data;
+            
+            // Update stats bar
+            document.getElementById('statsBar').classList.remove('hidden');
+            document.getElementById('totalProps').textContent = data.total_props_available;
+            document.getElementById('analyzedProps').textContent = data.total_analyzed;
+            document.getElementById('foundOpps').textContent = data.opportunities_found;
+            
+            if (data.opportunities_found > 0) {
+                const avgEdge = data.opportunities.reduce((sum, o) => 
+                    sum + o.line_analysis.edge, 0) / data.opportunities_found;
+                document.getElementById('avgEdge').textContent = avgEdge.toFixed(1) + '%';
+            } else {
+                document.getElementById('avgEdge').textContent = '-';
+            }
+
+            const scanTime = new Date(data.scan_time);
+            document.getElementById('scanTime').textContent = scanTime.toLocaleTimeString('fr-FR', {
+                hour: '2-digit', minute: '2-digit'
+            });
+
+            if (data.opportunities_found === 0) {
+                document.getElementById('emptyDiv').classList.remove('hidden');
+                document.getElementById('emptyEdge').textContent = data.filters.min_edge;
+                return;
+            }
+
+            // Create day tabs
+            const opportunitiesByDate = data.opportunities_by_date || {};
+            const dates = Object.keys(opportunitiesByDate).sort();
+            
+            if (dates.length > 1) {
+                const tabsDiv = document.getElementById('dayTabs');
+                tabsDiv.innerHTML = '';
+                
+                dates.forEach((date, index) => {
+                    const count = opportunitiesByDate[date].length;
+                    const dateObj = new Date(date);
+                    const isToday = dateObj.toDateString() === new Date().toDateString();
+                    const isTomorrow = dateObj.toDateString() === new Date(Date.now() + 86400000).toDateString();
+                    
+                    let dayLabel = dateObj.toLocaleDateString('fr-FR', { 
+                        weekday: 'long', day: 'numeric', month: 'long' 
+                    });
+                    
+                    if (isToday) dayLabel = "Aujourd'hui";
+                    if (isTomorrow) dayLabel = "Demain";
+                    
+                    const tab = document.createElement('div');
+                    tab.className = `day-tab ${index === 0 ? 'active' : ''}`;
+                    tab.onclick = () => showDay(date);
+                    tab.innerHTML = `
+                        <div class="day-tab-date">${dayLabel}</div>
+                        <div class="day-tab-count">${count} opportunité(s)</div>
+                    `;
+                    tabsDiv.appendChild(tab);
+                });
+                
+                tabsDiv.classList.remove('hidden');
+            }
+            
+            if (dates.length > 0) {
+                showDay(dates[0]);
+            }
+        }
+
+        function showDay(date) {
+            if (!currentData) return;
+            
+            // Update active tab
+            document.querySelectorAll('.day-tab').forEach(tab => {
+                tab.classList.remove('active');
             });
             
-            if (isToday) dayLabel = "Aujourd'hui";
-            if (isTomorrow) dayLabel = "Demain";
+            // Show opportunities for the day
+            const opportunities = currentData.opportunities_by_date[date] || [];
             
-            const tab = document.createElement('div');
-            tab.className = `day-tab ${index === 0 ? 'active' : ''}`;
-            tab.onclick = () => showDay(date);
-            tab.innerHTML = `
-                <div class="day-tab-date">${dayLabel}</div>
-                <div class="day-tab-count">${count} opportunité(s)</div>
-            `;
-            tabsDiv.appendChild(tab);
-        });
-        
-        tabsDiv.classList.remove('hidden');
-    }
-    
-    if (dates.length > 0) {
-        showDay(dates[0]);
-    }
-}
-```
+            const resultsDiv = document.getElementById('resultsDiv');
+            resultsDiv.innerHTML = opportunities.map(opp => createOpportunityCard(opp)).join('');
+            resultsDiv.classList.remove('hidden');
+        }
 
----
+        function createOpportunityCard(opp) {
+            const rec = opp.line_analysis.recommendation;
+            const recClass = rec.toLowerCase();
+            const edge = opp.line_analysis.edge;
+            const kelly = opp.line_analysis.kelly_criterion;
 
-## 6. AJOUTE CETTE NOUVELLE FONCTION:
+            const statLabel = {
+                'points': 'Points',
+                'assists': 'Assists',
+                'rebounds': 'Rebounds'
+            }[opp.stat_type];
 
-```javascript
-function showDay(date) {
-    if (!currentData) return;
-    
-    // Update active tab
-    document.querySelectorAll('.day-tab').forEach(tab => {
-        tab.classList.remove('active');
-    });
-    if (event && event.target) {
-        event.target.closest('.day-tab')?.classList.add('active');
-    }
-    
-    // Affiche opportunités du jour
-    const opportunities = currentData.opportunities_by_date[date] || [];
-    
-    const resultsDiv = document.getElementById('resultsDiv');
-    resultsDiv.innerHTML = opportunities.map(opp => createOpportunityCard(opp)).join('');
-    resultsDiv.classList.remove('hidden');
-}
-```
+            const bookmaker = opp.bookmaker_info?.bookmaker?.toUpperCase() || 'N/A';
+            const odds = rec === 'OVER' ? opp.bookmaker_info?.over_odds : opp.bookmaker_info?.under_odds;
+            
+            // Game info
+            const gameInfo = opp.game_info || {};
+            const gameDate = gameInfo.date ? new Date(gameInfo.date).toLocaleDateString('fr-FR') : '';
+            const gameTime = gameInfo.time ? new Date(gameInfo.time).toLocaleTimeString('fr-FR', {hour: '2-digit', minute: '2-digit'}) : '';
+            const matchup = gameInfo.away_team && gameInfo.home_team ? 
+                `${gameInfo.away_team} @ ${gameInfo.home_team}` : '';
 
----
+            return `
+                <div class="opp-card ${recClass}">
+                    ${matchup ? `
+                        <div class="game-info-box">
+                            <strong>📅 ${gameDate}</strong> à <strong>${gameTime}</strong><br>
+                            <strong>🏀 ${matchup}</strong>
+                        </div>
+                    ` : ''}
+                    
+                    <div class="opp-header">
+                        <div>
+                            <div class="opp-player">${opp.player}</div>
+                            <div class="opp-matchup">
+                                ${opp.is_home ? 'vs' : '@'} ${opp.opponent} • ${statLabel}
+                            </div>
+                        </div>
+                        <div class="opp-badge ${recClass}">
+                            ${rec} ${opp.line_analysis.bookmaker_line}
+                        </div>
+                    </div>
 
-## 7. DANS createOpportunityCard(), AJOUTE APRÈS <div class="opp-card ${recClass}">:
+                    <div class="opp-prediction">
+                        <div class="pred-main">
+                            <div>
+                                <div style="font-size: 0.9em; color: #666; margin-bottom: 5px;">
+                                    Prédiction modèle
+                                </div>
+                                <div class="pred-value">${opp.prediction}</div>
+                            </div>
+                            <div class="pred-vs">
+                                <div class="pred-vs-label">vs Ligne</div>
+                                <div class="pred-vs-value">${opp.line_analysis.bookmaker_line}</div>
+                            </div>
+                        </div>
 
-```javascript
-    // Info du match
-    const gameInfo = opp.game_info || {};
-    const gameDate = gameInfo.date ? new Date(gameInfo.date).toLocaleDateString('fr-FR') : '';
-    const gameTime = gameInfo.time ? new Date(gameInfo.time).toLocaleTimeString('fr-FR', {hour: '2-digit', minute: '2-digit'}) : '';
-    const matchup = gameInfo.away_team && gameInfo.home_team ? 
-        `${gameInfo.away_team} @ ${gameInfo.home_team}` : '';
+                        <div class="metrics-grid">
+                            <div class="metric">
+                                <div class="metric-label">Edge</div>
+                                <div class="metric-value positive">+${edge.toFixed(1)}%</div>
+                            </div>
+                            <div class="metric">
+                                <div class="metric-label">Probabilité</div>
+                                <div class="metric-value">${opp.line_analysis[rec.toLowerCase() + '_probability']}%</div>
+                            </div>
+                            <div class="metric">
+                                <div class="metric-label">Kelly</div>
+                                <div class="metric-value">${kelly.toFixed(1)}%</div>
+                            </div>
+                            <div class="metric">
+                                <div class="metric-label">Confiance</div>
+                                <div class="metric-value">${opp.line_analysis.bet_confidence}</div>
+                            </div>
+                            <div class="metric">
+                                <div class="metric-label">σ (Écart-type)</div>
+                                <div class="metric-value">${opp.season_stats.std_dev}</div>
+                            </div>
+                            <div class="metric">
+                                <div class="metric-label">R²</div>
+                                <div class="metric-value">${opp.regression_stats.r_squared}</div>
+                            </div>
+                        </div>
+                    </div>
 
-    return `
-        <div class="opp-card ${recClass}">
-            ${gameDate || gameTime ? `
-                <div style="background: #e0f2fe; padding: 8px 12px; border-radius: 8px; margin-bottom: 15px; font-size: 0.9em;">
-                    <strong>Match:</strong> ${matchup}<br>
-                    <strong>Date:</strong> ${gameDate} à ${gameTime}
+                    <div class="odds-comparison">
+                        <div class="odds-row">
+                            <span class="odds-label">📊 Bookmaker:</span>
+                            <span class="odds-value">${bookmaker}</span>
+                        </div>
+                        <div class="odds-row">
+                            <span class="odds-label">💰 Cote ${rec}:</span>
+                            <span class="odds-value">${odds > 0 ? '+' : ''}${odds}</span>
+                        </div>
+                    </div>
+
+                    <button class="expand-btn" onclick="toggleExpanded(this)">
+                        ▼ Voir détails complets
+                    </button>
+
+                    <div class="expanded-stats">
+                        <div class="stat-section">
+                            <h4>📊 Statistiques Saison</h4>
+                            <p><strong>Matchs joués:</strong> ${opp.season_stats.games_played}</p>
+                            <p><strong>Matchs utilisés:</strong> ${opp.season_stats.games_used}</p>
+                            <p><strong>Moyenne:</strong> ${opp.season_stats.weighted_avg}</p>
+                            <p><strong>Min/Max:</strong> ${opp.season_stats.min} / ${opp.season_stats.max}</p>
+                        </div>
+
+                        <div class="stat-section">
+                            <h4>📈 Régression</h4>
+                            <p><strong>R² ajusté:</strong> ${opp.regression_stats.adjusted_r_squared}</p>
+                            <p><strong>RMSE:</strong> ${opp.regression_stats.rmse}</p>
+                        </div>
+
+                        ${opp.chi_square_test ? `
+                        <div class="stat-section">
+                            <h4>📈 Test Chi-carré</h4>
+                            <p><strong>χ²:</strong> ${opp.chi_square_test.chi2_statistic.toFixed(3)}</p>
+                            <p><strong>p-value:</strong> ${opp.chi_square_test.p_value.toFixed(4)}</p>
+                            <p>${opp.chi_square_test.interpretation}</p>
+                        </div>
+                        ` : ''}
+                    </div>
                 </div>
-            ` : ''}
+            `;
+        }
+
+        function toggleExpanded(button) {
+            const card = button.closest('.opp-card');
+            const expanded = card.querySelector('.expanded-stats');
             
-            <!-- Reste du code inchangé -->
-```
+            if (expanded.classList.contains('show')) {
+                expanded.classList.remove('show');
+                button.textContent = '▼ Voir détails complets';
+            } else {
+                expanded.classList.add('show');
+                button.textContent = '▲ Masquer détails';
+            }
+        }
 
----
+        function displayError(message) {
+            const errorDiv = document.getElementById('errorDiv');
+            errorDiv.textContent = `❌ ${message}`;
+            errorDiv.classList.remove('hidden');
+        }
+    </script>
+</body>
+</html>
 
-## C'EST TOUT! 
+<!-- ╔═══════════════════════════════════════════════════════════════╗ -->
+<!-- ║                    FIN PART 2/2                               ║ -->
+<!-- ║  ✅ FICHIER COMPLET!                                          ║ -->
+<!-- ╚═══════════════════════════════════════════════════════════════╝ -->
 
-Push:
-```bash
-git add .
-git commit -m "feat: support 2 jours"
-git push
-```
- 
