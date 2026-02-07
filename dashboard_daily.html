@@ -1,5 +1,16 @@
 <!DOCTYPE html>
 <html lang="fr">
+<!-- 
+╔═══════════════════════════════════════════════════════════════╗
+║  DASHBOARD_DAILY.HTML - PART 1/2                             ║
+║                                                               ║
+║  📋 INSTRUCTIONS:                                             ║
+║  1. Télécharge PART1 et PART2                                 ║
+║  2. Copie TOUT le contenu de PART1                            ║
+║  3. Copie TOUT le contenu de PART2 EN DESSOUS                 ║
+║  4. Sauvegarde comme "dashboard_daily.html"                   ║
+╚═══════════════════════════════════════════════════════════════╝
+-->
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -516,6 +527,25 @@
         <div id="errorDiv" class="error hidden"></div>
     </div>
 
+<!-- ╔═══════════════════════════════════════════════════════════════╗ -->
+<!-- ║                    FIN PART 1/2                               ║ -->
+<!-- ║  ⚠️  OUVRE dashboard_daily_PART2.html ET COPIE EN DESSOUS     ║ -->
+<!-- ╚═══════════════════════════════════════════════════════════════╝ -->
+
+<!-- 
+╔═══════════════════════════════════════════════════════════════╗
+║  DASHBOARD_DAILY.HTML - PART 2/2                             ║
+║                                                               ║
+║  ⚠️ CE FICHIER COMMENCE AU MILIEU DU CODE!                   ║
+║                                                               ║
+║  📋 INSTRUCTIONS:                                             ║
+║  1. Ouvre dashboard_daily_PART1.html                          ║
+║  2. Copie TOUT son contenu                                    ║
+║  3. Copie TOUT le contenu ci-dessous EN DESSOUS               ║
+║  4. Sauvegarde comme "dashboard_daily.html"                   ║
+╚═══════════════════════════════════════════════════════════════╝
+-->
+
     <script>
         const API_URL = 'https://nba-betting-1.onrender.com';
         let currentData = null;
@@ -673,4 +703,153 @@
             const rec = opp.line_analysis.recommendation;
             const recClass = rec.toLowerCase();
             const edge = opp.line_analysis.edge;
-  
+            const kelly = opp.line_analysis.kelly_criterion;
+
+            const statLabel = {
+                'points': 'Points',
+                'assists': 'Assists',
+                'rebounds': 'Rebounds'
+            }[opp.stat_type];
+
+            const bookmaker = opp.bookmaker_info?.bookmaker?.toUpperCase() || 'N/A';
+            const odds = rec === 'OVER' ? opp.bookmaker_info?.over_odds : opp.bookmaker_info?.under_odds;
+            
+            // Game info
+            const gameInfo = opp.game_info || {};
+            const gameDate = gameInfo.date ? new Date(gameInfo.date).toLocaleDateString('fr-FR') : '';
+            const gameTime = gameInfo.time ? new Date(gameInfo.time).toLocaleTimeString('fr-FR', {hour: '2-digit', minute: '2-digit'}) : '';
+            const matchup = gameInfo.away_team && gameInfo.home_team ? 
+                `${gameInfo.away_team} @ ${gameInfo.home_team}` : '';
+
+            return `
+                <div class="opp-card ${recClass}">
+                    ${matchup ? `
+                        <div class="game-info-box">
+                            <strong>📅 ${gameDate}</strong> à <strong>${gameTime}</strong><br>
+                            <strong>🏀 ${matchup}</strong>
+                        </div>
+                    ` : ''}
+                    
+                    <div class="opp-header">
+                        <div>
+                            <div class="opp-player">${opp.player}</div>
+                            <div class="opp-matchup">
+                                ${opp.is_home ? 'vs' : '@'} ${opp.opponent} • ${statLabel}
+                            </div>
+                        </div>
+                        <div class="opp-badge ${recClass}">
+                            ${rec} ${opp.line_analysis.bookmaker_line}
+                        </div>
+                    </div>
+
+                    <div class="opp-prediction">
+                        <div class="pred-main">
+                            <div>
+                                <div style="font-size: 0.9em; color: #666; margin-bottom: 5px;">
+                                    Prédiction modèle
+                                </div>
+                                <div class="pred-value">${opp.prediction}</div>
+                            </div>
+                            <div class="pred-vs">
+                                <div class="pred-vs-label">vs Ligne</div>
+                                <div class="pred-vs-value">${opp.line_analysis.bookmaker_line}</div>
+                            </div>
+                        </div>
+
+                        <div class="metrics-grid">
+                            <div class="metric">
+                                <div class="metric-label">Edge</div>
+                                <div class="metric-value positive">+${edge.toFixed(1)}%</div>
+                            </div>
+                            <div class="metric">
+                                <div class="metric-label">Probabilité</div>
+                                <div class="metric-value">${opp.line_analysis[rec.toLowerCase() + '_probability']}%</div>
+                            </div>
+                            <div class="metric">
+                                <div class="metric-label">Kelly</div>
+                                <div class="metric-value">${kelly.toFixed(1)}%</div>
+                            </div>
+                            <div class="metric">
+                                <div class="metric-label">Confiance</div>
+                                <div class="metric-value">${opp.line_analysis.bet_confidence}</div>
+                            </div>
+                            <div class="metric">
+                                <div class="metric-label">σ (Écart-type)</div>
+                                <div class="metric-value">${opp.season_stats.std_dev}</div>
+                            </div>
+                            <div class="metric">
+                                <div class="metric-label">R²</div>
+                                <div class="metric-value">${opp.regression_stats.r_squared}</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="odds-comparison">
+                        <div class="odds-row">
+                            <span class="odds-label">📊 Bookmaker:</span>
+                            <span class="odds-value">${bookmaker}</span>
+                        </div>
+                        <div class="odds-row">
+                            <span class="odds-label">💰 Cote ${rec}:</span>
+                            <span class="odds-value">${odds > 0 ? '+' : ''}${odds}</span>
+                        </div>
+                    </div>
+
+                    <button class="expand-btn" onclick="toggleExpanded(this)">
+                        ▼ Voir détails complets
+                    </button>
+
+                    <div class="expanded-stats">
+                        <div class="stat-section">
+                            <h4>📊 Statistiques Saison</h4>
+                            <p><strong>Matchs joués:</strong> ${opp.season_stats.games_played}</p>
+                            <p><strong>Matchs utilisés:</strong> ${opp.season_stats.games_used}</p>
+                            <p><strong>Moyenne:</strong> ${opp.season_stats.weighted_avg}</p>
+                            <p><strong>Min/Max:</strong> ${opp.season_stats.min} / ${opp.season_stats.max}</p>
+                        </div>
+
+                        <div class="stat-section">
+                            <h4>📈 Régression</h4>
+                            <p><strong>R² ajusté:</strong> ${opp.regression_stats.adjusted_r_squared}</p>
+                            <p><strong>RMSE:</strong> ${opp.regression_stats.rmse}</p>
+                        </div>
+
+                        ${opp.chi_square_test ? `
+                        <div class="stat-section">
+                            <h4>📈 Test Chi-carré</h4>
+                            <p><strong>χ²:</strong> ${opp.chi_square_test.chi2_statistic.toFixed(3)}</p>
+                            <p><strong>p-value:</strong> ${opp.chi_square_test.p_value.toFixed(4)}</p>
+                            <p>${opp.chi_square_test.interpretation}</p>
+                        </div>
+                        ` : ''}
+                    </div>
+                </div>
+            `;
+        }
+
+        function toggleExpanded(button) {
+            const card = button.closest('.opp-card');
+            const expanded = card.querySelector('.expanded-stats');
+            
+            if (expanded.classList.contains('show')) {
+                expanded.classList.remove('show');
+                button.textContent = '▼ Voir détails complets';
+            } else {
+                expanded.classList.add('show');
+                button.textContent = '▲ Masquer détails';
+            }
+        }
+
+        function displayError(message) {
+            const errorDiv = document.getElementById('errorDiv');
+            errorDiv.textContent = `❌ ${message}`;
+            errorDiv.classList.remove('hidden');
+        }
+    </script>
+</body>
+</html>
+
+<!-- ╔═══════════════════════════════════════════════════════════════╗ -->
+<!-- ║                    FIN PART 2/2                               ║ -->
+<!-- ║  ✅ FICHIER COMPLET!                                          ║ -->
+<!-- ╚═══════════════════════════════════════════════════════════════╝ -->
