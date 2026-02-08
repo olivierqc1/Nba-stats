@@ -347,6 +347,77 @@ def get_odds_usage():
 # MAIN
 # ============================================================================
 
+@app.route('/api/debug-odds', methods=['GET'])
+def debug_odds():
+    """Debug complet de l'API Odds"""
+    
+    debug_info = {
+        'odds_api_available': ODDS_API_AVAILABLE,
+        'odds_client_exists': odds_client is not None,
+        'api_key_configured': bool(os.environ.get('ODDS_API_KEY')),
+        'api_key_length': len(os.environ.get('ODDS_API_KEY', '')) if os.environ.get('ODDS_API_KEY') else 0
+    }
+    
+    if not ODDS_API_AVAILABLE or not odds_client:
+        return jsonify({
+            'status': 'ERROR',
+            'message': 'Odds API not initialized',
+            'debug': debug_info
+        })
+    
+    try:
+        # Test direct de l'API
+        print("🔍 Testing Odds API...")
+        
+        # Appelle l'API
+        raw_props = odds_client.get_player_props(days=1)
+        
+        # Analyse les résultats
+        total_props = len(raw_props)
+        
+        # Compte par market
+        markets = {}
+        for prop in raw_props:
+            market = prop.get('market', 'unknown')
+            markets[market] = markets.get(market, 0) + 1
+        
+        # Sample de props
+        sample_props = raw_props[:3] if raw_props else []
+        
+        return jsonify({
+            'status': 'SUCCESS',
+            'debug': debug_info,
+            'results': {
+                'total_props': total_props,
+                'markets_found': markets,
+                'sample_props': sample_props,
+                'first_prop_structure': raw_props[0] if raw_props else None
+            }
+        })
+    
+    except Exception as e:
+        import traceback
+        return jsonify({
+            'status': 'ERROR',
+            'message': str(e),
+            'traceback': traceback.format_exc(),
+            'debug': debug_info
+        })
+```
+
+---
+
+## **🚀 ÉTAPES:**
+
+### **1. Commit ce code sur GitHub**
+
+### **2. Attends que Render redéploie (2-3 min)**
+
+### **3. Ouvre cette URL dans ton navigateur:**
+```
+https://nba-stats-xcyv.onrender.com/api/debug-odds
+
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     debug = os.environ.get('DEBUG', 'False').lower() == 'true'
