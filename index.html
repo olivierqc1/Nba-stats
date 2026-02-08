@@ -266,8 +266,8 @@
 
             try {
                 const response = await fetch(
-                    `${API_URL}/api/daily-opportunities-demo?min_edge=${minEdge}&min_r2=${minR2}`
-                );
+    `${API_URL}/api/daily-opportunities?min_edge=${minEdge}`
+);
 
                 if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
