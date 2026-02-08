@@ -252,8 +252,7 @@
 
         <div id="errorDiv" class="error hidden"></div>
     </div>
-
-    <script>
+<script>
         const API_URL = 'https://nba-stats-xcyv.onrender.com';
 
         async function scanOpportunities() {
@@ -265,13 +264,10 @@
             document.getElementById('resultsDiv').classList.add('hidden');
             document.getElementById('errorDiv').classList.add('hidden');
 
-           try {
-    const response = await fetch(
-        `${API_URL}/api/daily-opportunities-demo?min_edge=${minEdge}&min_r2=${minR2}`
-    );
-```
-
-
+            try {
+                const response = await fetch(
+                    `${API_URL}/api/daily-opportunities-demo?min_edge=${minEdge}&min_r2=${minR2}`
+                );
 
                 if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
@@ -293,7 +289,6 @@
             console.log('📥 Data received:', data);
             console.log('Total opportunities:', data.opportunities_found);
             
-            // Filtre par R²
             let opportunities = data.opportunities || [];
             console.log('Opportunities array length:', opportunities.length);
             
@@ -304,14 +299,12 @@
             
             console.log('After R² filter:', opportunities.length);
             
-            // Trie par R² décroissant (du plus fiable au moins fiable)
             opportunities.sort((a, b) => {
                 const r2_a = a.regression_stats?.r_squared || 0;
                 const r2_b = b.regression_stats?.r_squared || 0;
                 return r2_b - r2_a;
             });
 
-            // Update stats
             document.getElementById('statsBar').classList.remove('hidden');
             document.getElementById('analyzedProps').textContent = data.total_analyzed;
             document.getElementById('foundOpps').textContent = opportunities.length;
@@ -419,4 +412,4 @@
         }
     </script>
 </body>
-</html>
+</html> 
