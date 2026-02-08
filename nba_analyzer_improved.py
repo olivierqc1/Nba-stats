@@ -2,17 +2,18 @@
 # -*- coding: utf-8 -*-
 """
 NBA Betting Analyzer - API Backend avec XGBoost
-VERSION AMÉLIORÉE avec 35+ variables prédictives
+VERSION OPTIMISÉE: 3 endpoints séparés + randomisation
 """
 
 import os
 import sys
+import random
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from datetime import datetime
 import numpy as np
 
-# Import des nouveaux modules
+# Import des modules
 try:
     from advanced_data_collector import AdvancedDataCollector
     from xgboost_model import XGBoostNBAModel, ModelManager
@@ -20,7 +21,6 @@ try:
     print("✅ XGBoost mode activé")
 except ImportError as e:
     print(f"⚠️  XGBoost non disponible: {e}")
-    print("Mode fallback: régression linéaire")
     XGBOOST_AVAILABLE = False
 
 # Import odds API
@@ -46,63 +46,13 @@ model_manager = ModelManager() if XGBOOST_AVAILABLE else None
 
 
 # ============================================================================
-# ENDPOINT: ANALYSE AVEC XGBOOST
+# ANALYSE XGBOOST
 # ============================================================================
 
-@app.route('/api/analyze', methods=['POST'])
-def analyze():
-    """
-    Analyse UNE statistique avec XGBoost
-    
-    Body:
-        {
-            "player": "LeBron James",
-            "opponent": "GSW",
-            "is_home": true,
-            "stat_type": "points",
-            "line": 25.5,
-            "remove_outliers": true
-        }
-    """
-    
-    try:
-        data = request.json
-        
-        player = data.get('player')
-        opponent = data.get('opponent')
-        is_home = data.get('is_home', True)
-        stat_type = data.get('stat_type', 'points')
-        line = data.get('line')
-        
-        if not player or not opponent:
-            return jsonify({'error': 'Missing player or opponent'}), 400
-        
-        # Mode XGBoost
-        if XGBOOST_AVAILABLE and model_manager:
-            result = analyze_with_xgboost(
-                player, opponent, is_home, stat_type, line
-            )
-        else:
-            # Fallback: régression linéaire basique
-            result = analyze_with_linear_regression(
-                player, opponent, is_home, stat_type, line
-            )
-        
-        return jsonify(result)
-    
-    except Exception as e:
-        return jsonify({
-            'status': 'ERROR',
-            'error': str(e)
-        }), 500
-
-
 def analyze_with_xgboost(player, opponent, is_home, stat_type, line):
-    """
-    Analyse avec XGBoost (VERSION AMÉLIORÉE)
-    """
+    """Analyse avec XGBoost"""
     
-    print(f"\n🤖 Analyse XGBoost: {player} vs {opponent} ({stat_type})")
+    print(f"🤖 Analyse: {player} vs {opponent} ({stat_type})")
     
     # 1. Prépare features
     features = collector.prepare_features_for_prediction(
@@ -110,31 +60,21 @@ def analyze_with_xgboost(player, opponent, is_home, stat_type, line):
     )
     
     if features is None:
-        return {
-            'status': 'ERROR',
-            'error': 'Unable to collect player data'
-        }
+        return {'status': 'ERROR', 'error': 'Unable to collect data'}
     
-    # 2. Charge ou entraîne modèle
+    # 2. Prédiction
     try:
         prediction_result = model_manager.predict(
             player, stat_type, opponent, is_home
         )
     except Exception as e:
-        return {
-            'status': 'ERROR',
-            'error': f'Model error: {str(e)}'
-        }
+        return {'status': 'ERROR', 'error': f'Model error: {str(e)}'}
     
     prediction = prediction_result['prediction']
     confidence_interval = prediction_result['confidence_interval']
     
-    # 3. Analyse de la ligne
-    line_analysis = analyze_betting_line(
-        prediction, 
-        confidence_interval, 
-        line
-    )
+    # 3. Analyse ligne
+    line_analysis = analyze_betting_line(prediction, confidence_interval, line)
     
     # 4. Stats saison
     df = collector.get_complete_player_data(player)
@@ -149,17 +89,16 @@ def analyze_with_xgboost(player, opponent, is_home, stat_type, line):
         'max': int(df[stat_col].max())
     }
     
-    # 5. Calcule R² du modèle
+    # 5. R² du modèle
     model_key = f"{player}_{stat_type}"
     if model_key in model_manager.models:
         model_stats = model_manager.models[model_key].training_stats
         r_squared = model_stats['train_metrics']['r2']
         rmse = model_stats['train_metrics']['rmse']
     else:
-        r_squared = 0.87  # Valeur typique XGBoost
+        r_squared = 0.87
         rmse = 2.8
     
-    # 6. Résultat complet
     return {
         'status': 'SUCCESS',
         'player': player,
@@ -172,58 +111,27 @@ def analyze_with_xgboost(player, opponent, is_home, stat_type, line):
         'season_stats': season_stats,
         'regression_stats': {
             'r_squared': round(r_squared, 3),
-            'adjusted_r_squared': round(r_squared - 0.02, 3),
             'rmse': round(rmse, 2),
-            'model_type': 'XGBoost',
-            'features_count': len(features)
-        },
-        'chi_square_test': {
-            'chi2_statistic': 8.42,
-            'p_value': 0.392,
-            'dof': 5,
-            'significant': False,
-            'interpretation': '✅ Modèle conforme (p ≥ 0.05)'
-        },
-        'outlier_analysis': {
-            'method': 'IQR + Z-score + MAD',
-            'outliers_detected': 0,
-            'outliers_pct': 0.0,
-            'data_used': 'ALL',
-            'recommendation': 'Tous les matchs utilisés',
-            'outliers': []
-        },
-        'trend_analysis': {
-            'slope': round(features.get('trend_5', 0), 2),
-            'r_squared': 0.45,
-            'p_value': 0.023,
-            'interpretation': 'Tendance détectée via feature engineering'
+            'model_type': 'XGBoost'
         },
         'data_source': 'NBA API + XGBoost'
     }
 
 
 def analyze_betting_line(prediction, confidence_interval, line):
-    """
-    Analyse la ligne bookmaker
-    """
+    """Analyse la ligne bookmaker"""
     
     if line is None:
-        return {
-            'recommendation': 'NO_LINE',
-            'bookmaker_line': None
-        }
+        return {'recommendation': 'NO_LINE', 'bookmaker_line': None}
     
-    # Probabilités (basées sur distribution normale)
-    std = (confidence_interval['upper'] - confidence_interval['lower']) / (2 * 1.96)
+    std = (confidence_interval['upper'] - confidence_interval['lower']) / 3.92
     
-    # P(X > line)
-    z_score = (line - prediction) / std
     from scipy import stats
+    z_score = (line - prediction) / std
     over_prob = (1 - stats.norm.cdf(z_score)) * 100
     under_prob = 100 - over_prob
     
-    # Edge (différence entre vraie prob et cote implicite)
-    implied_prob = 52.4  # Odds -110 ≈ 52.4%
+    implied_prob = 52.4
     
     if over_prob > implied_prob:
         edge = over_prob - implied_prob
@@ -238,20 +146,10 @@ def analyze_betting_line(prediction, confidence_interval, line):
         recommendation = 'SKIP'
         bet_prob = max(over_prob, under_prob)
     
-    # Kelly Criterion
-    if edge > 5:
-        kelly = (bet_prob/100 - (1-bet_prob/100)) * 100
-        kelly = max(min(kelly, 10), 0)  # Cap à 10%
-    else:
-        kelly = 0
+    kelly = (bet_prob/100 - (1-bet_prob/100)) * 100 if edge > 5 else 0
+    kelly = max(min(kelly, 10), 0)
     
-    # Confiance
-    if edge >= 10:
-        confidence = 'HIGH'
-    elif edge >= 5:
-        confidence = 'MEDIUM'
-    else:
-        confidence = 'LOW'
+    confidence = 'HIGH' if edge >= 10 else 'MEDIUM' if edge >= 5 else 'LOW'
     
     return {
         'recommendation': recommendation,
@@ -264,220 +162,174 @@ def analyze_betting_line(prediction, confidence_interval, line):
     }
 
 
-def analyze_with_linear_regression(player, opponent, is_home, stat_type, line):
-    """
-    Fallback: régression linéaire basique
-    """
-    # Version simplifiée pour fallback
-    return {
-        'status': 'SUCCESS',
-        'player': player,
-        'opponent': opponent,
-        'prediction': 25.0,
-        'confidence_interval': {'lower': 20, 'upper': 30},
-        'line_analysis': {
-            'recommendation': 'SKIP',
-            'edge': 0
-        },
-        'data_source': 'Fallback - Linear Regression'
-    }
-
-
 # ============================================================================
-# ENDPOINT: ANALYSE ALL (3 stats)
+# ENDPOINTS PAR TYPE (POINTS, ASSISTS, REBOUNDS)
 # ============================================================================
 
-@app.route('/api/analyze-all', methods=['POST'])
-def analyze_all():
-    """
-    Analyse LES 3 statistiques (points, assists, rebounds)
-    """
-    
-    try:
-        data = request.json
-        
-        player = data.get('player')
-        opponent = data.get('opponent')
-        is_home = data.get('is_home', True)
-        lines = data.get('lines', {})
-        
-        results = {}
-        
-        for stat_type in ['points', 'assists', 'rebounds']:
-            line = lines.get(stat_type)
-            
-            if XGBOOST_AVAILABLE:
-                result = analyze_with_xgboost(
-                    player, opponent, is_home, stat_type, line
-                )
-            else:
-                result = analyze_with_linear_regression(
-                    player, opponent, is_home, stat_type, line
-                )
-            
-            results[stat_type] = result
-        
-        return jsonify({
-            'status': 'SUCCESS',
-            'analyses': results
-        })
-    
-    except Exception as e:
-        return jsonify({
-            'status': 'ERROR',
-            'error': str(e)
-        }), 500
+@app.route('/api/daily-opportunities-points', methods=['GET'])
+def daily_opportunities_points():
+    """Scan 25 opportunités POINTS aléatoires"""
+    return scan_opportunities_by_type('points', limit=25)
 
 
-# ============================================================================
-# ENDPOINT: DAILY OPPORTUNITIES (avec XGBoost)
-# ============================================================================
+@app.route('/api/daily-opportunities-assists', methods=['GET'])
+def daily_opportunities_assists():
+    """Scan 25 opportunités ASSISTS aléatoires"""
+    return scan_opportunities_by_type('assists', limit=25)
 
-@app.route('/api/daily-opportunities', methods=['GET'])
-def daily_opportunities():
+
+@app.route('/api/daily-opportunities-rebounds', methods=['GET'])
+def daily_opportunities_rebounds():
+    """Scan 25 opportunités REBOUNDS aléatoires"""
+    return scan_opportunities_by_type('rebounds', limit=25)
+
+
+def scan_opportunities_by_type(stat_type, limit=25):
     """
-    Scan toutes les opportunités du jour avec XGBoost
+    Scan opportunités pour UN type de stat avec randomisation
     """
     
     min_edge = request.args.get('min_edge', 5.0, type=float)
-    min_confidence = request.args.get('min_confidence', 'MEDIUM', type=str)
-    days = request.args.get('days', 2, type=int)
+    min_r2 = request.args.get('min_r2', 0.70, type=float)
     
     if not ODDS_API_AVAILABLE or not odds_client:
         return jsonify({
             'status': 'ERROR',
-            'message': 'Odds API not available'
+            'message': 'Odds API not available - configure ODDS_API_KEY'
+        }), 503
+    
+    if not XGBOOST_AVAILABLE:
+        return jsonify({
+            'status': 'ERROR',
+            'message': 'XGBoost not available'
         }), 503
     
     print(f"\n{'='*70}")
-    print(f"SCANNING OPPORTUNITIES - {days} DAY(S) - XGBOOST MODE")
+    print(f"🎲 SCANNING {stat_type.upper()} - {limit} PROPS (RANDOM)")
     print(f"{'='*70}\n")
     
-    # Récupère props
-    props = odds_client.get_player_props(days=days)
-    
-    opportunities_by_date = {}
-    analyzed_count = 0
-    
-    for prop in props:
-        player = prop['player']
-        stat_type = prop['stat_type']
-        line = prop['line']
-        opponent = prop['away_team'] if prop['home_team'] else prop['away_team']
-        is_home = True  # Simplifié
-        date = prop['date']
+    try:
+        # Récupère TOUTES les props
+        all_props = odds_client.get_player_props(days=1)
         
-        try:
-            # Analyse avec XGBoost
-            if XGBOOST_AVAILABLE:
+        # Map stat type to market name
+        stat_map = {
+            'points': 'player_points',
+            'assists': 'player_assists', 
+            'rebounds': 'player_rebounds'
+        }
+        
+        market_name = stat_map.get(stat_type)
+        
+        # Filtre par stat_type
+        filtered_props = [
+            p for p in all_props 
+            if p.get('market') == market_name
+        ]
+        
+        print(f"📊 Total {stat_type} available: {len(filtered_props)}")
+        
+        # RANDOMISE et limite
+        random.shuffle(filtered_props)
+        selected_props = filtered_props[:limit]
+        
+        print(f"🎲 Selected (random): {len(selected_props)}")
+        
+        opportunities = []
+        analyzed_count = 0
+        
+        for prop in selected_props:
+            player = prop['player']
+            line = prop['line']
+            opponent = prop.get('away_team', 'Unknown')
+            is_home = bool(prop.get('home_team'))
+            
+            try:
                 result = analyze_with_xgboost(
                     player, opponent, is_home, stat_type, line
                 )
-            else:
-                result = analyze_with_linear_regression(
-                    player, opponent, is_home, stat_type, line
-                )
+                
+                analyzed_count += 1
+                
+                if result.get('status') != 'SUCCESS':
+                    continue
+                
+                r2 = result['regression_stats']['r_squared']
+                edge = result['line_analysis']['edge']
+                rec = result['line_analysis']['recommendation']
+                
+                # Filtres
+                if rec == 'SKIP' or edge < min_edge or r2 < min_r2:
+                    continue
+                
+                # Ajoute infos game
+                result['game_info'] = {
+                    'date': prop.get('date', ''),
+                    'time': prop.get('game_time', ''),
+                    'home_team': prop.get('home_team', ''),
+                    'away_team': prop.get('away_team', '')
+                }
+                
+                result['bookmaker_info'] = {
+                    'bookmaker': prop.get('bookmaker', 'Unknown'),
+                    'line': line,
+                    'over_odds': prop.get('over_odds', -110),
+                    'under_odds': prop.get('under_odds', -110)
+                }
+                
+                opportunities.append(result)
             
-            analyzed_count += 1
-            
-            if result.get('status') != 'SUCCESS':
+            except Exception as e:
+                print(f"❌ ERROR {player}: {e}")
                 continue
-            
-            edge = result['line_analysis']['edge']
-            rec = result['line_analysis']['recommendation']
-            
-            if rec == 'SKIP' or edge < min_edge:
-                continue
-            
-            # Ajoute infos
-            result['game_info'] = {
-                'date': date,
-                'time': prop.get('game_time', ''),
-                'home_team': prop['home_team'],
-                'away_team': prop['away_team']
-            }
-            
-            result['bookmaker_info'] = {
-                'bookmaker': prop['bookmaker'],
-                'line': line,
-                'over_odds': prop.get('over_odds', -110),
-                'under_odds': prop.get('under_odds', -110)
-            }
-            
-            # Groupe par date
-            if date not in opportunities_by_date:
-                opportunities_by_date[date] = []
-            
-            opportunities_by_date[date].append(result)
         
-        except Exception as e:
-            print(f"ERROR {player} {stat_type}: {e}")
-            continue
-    
-    # Trie et compte
-    for date in opportunities_by_date:
-        opportunities_by_date[date].sort(
-            key=lambda x: x['line_analysis']['edge'],
+        # Trie par R² décroissant
+        opportunities.sort(
+            key=lambda x: x['regression_stats']['r_squared'],
             reverse=True
         )
+        
+        print(f"✅ {analyzed_count} props analyzed")
+        print(f"✅ {len(opportunities)} opportunities found")
+        print(f"{'='*70}\n")
+        
+        return jsonify({
+            'status': 'SUCCESS',
+            'stat_type': stat_type,
+            'total_available': len(filtered_props),
+            'total_analyzed': analyzed_count,
+            'opportunities_found': len(opportunities),
+            'scan_time': datetime.now().isoformat(),
+            'model_type': 'XGBoost',
+            'filters': {
+                'min_edge': min_edge,
+                'min_r2': min_r2
+            },
+            'opportunities': opportunities
+        })
     
-    total_opportunities = sum(len(opps) for opps in opportunities_by_date.values())
-    
-    print(f"✅ {analyzed_count} props analyzed")
-    print(f"✅ {total_opportunities} opportunities found (edge >= {min_edge}%)")
-    print(f"{'='*70}\n")
-    
-    return jsonify({
-        'status': 'SUCCESS',
-        'total_props_available': len(props),
-        'total_analyzed': analyzed_count,
-        'opportunities_found': total_opportunities,
-        'scan_time': datetime.now().isoformat(),
-        'days_scanned': days,
-        'model_type': 'XGBoost' if XGBOOST_AVAILABLE else 'Linear',
-        'filters': {
-            'min_edge': min_edge,
-            'min_confidence': min_confidence
-        },
-        'opportunities_by_date': opportunities_by_date,
-        'opportunities': [
-            opp for opps in opportunities_by_date.values() for opp in opps
-        ]
-    })
+    except Exception as e:
+        print(f"❌ SCAN ERROR: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'status': 'ERROR',
+            'message': str(e)
+        }), 500
 
 
 # ============================================================================
-# ENDPOINTS AUXILIAIRES
+# AUTRES ENDPOINTS
 # ============================================================================
 
-@app.route('/api/teams', methods=['GET'])
-def get_teams():
-    """Liste des équipes NBA"""
-    from nba_api.stats.static import teams
-    
-    teams_list = teams.get_teams()
-    teams_formatted = [
-        {'code': t['abbreviation'], 'name': t['full_name']}
-        for t in teams_list
-    ]
-    
+@app.route('/api/health', methods=['GET'])
+def health_check():
+    """Health check"""
     return jsonify({
-        'status': 'SUCCESS',
-        'teams': teams_formatted
-    })
-
-
-@app.route('/api/team-roster/<team_code>', methods=['GET'])
-def get_team_roster(team_code):
-    """Roster d'une équipe"""
-    # Simplifié pour exemple
-    return jsonify({
-        'status': 'SUCCESS',
-        'team': team_code,
-        'roster': [
-            {'name': 'Player 1'},
-            {'name': 'Player 2'}
-        ]
+        'status': 'OK',
+        'xgboost_enabled': XGBOOST_AVAILABLE,
+        'odds_api_enabled': ODDS_API_AVAILABLE,
+        'timestamp': datetime.now().isoformat()
     })
 
 
@@ -491,84 +343,9 @@ def get_odds_usage():
     return jsonify({'error': 'Odds API not available'}), 503
 
 
-@app.route('/api/health', methods=['GET'])
-def health_check():
-    """Health check"""
-    return jsonify({
-        'status': 'OK',
-        'xgboost_enabled': XGBOOST_AVAILABLE,
-        'odds_api_enabled': ODDS_API_AVAILABLE,
-        'timestamp': datetime.now().isoformat()
-    })
-
-
 # ============================================================================
 # MAIN
 # ============================================================================
-
-
-# ============================================================================
-# ENDPOINT DEMO - PROPS SIMULÉES
-# ============================================================================
-
-@app.route('/api/daily-opportunities-demo', methods=['GET'])
-def daily_opportunities_demo():
-    min_edge = request.args.get('min_edge', 5.0, type=float)
-    min_r2 = request.args.get('min_r2', 0.70, type=float)
-    
-    fake_opportunities = [
-        {
-            'player': 'LeBron James', 'opponent': 'GSW', 'is_home': True, 'stat_type': 'points',
-            'prediction': 27.3, 'confidence_interval': {'lower': 22.1, 'upper': 32.5},
-            'line_analysis': {'recommendation': 'OVER', 'bookmaker_line': 25.5, 'over_probability': 67.2, 'under_probability': 32.8, 'edge': 14.7, 'kelly_criterion': 5.3, 'bet_confidence': 'HIGH'},
-            'regression_stats': {'r_squared': 0.87, 'rmse': 2.8},
-            'season_stats': {'games_played': 45, 'games_used': 45, 'weighted_avg': 26.8, 'std_dev': 4.2, 'min': 18, 'max': 38}
-        },
-        {
-            'player': 'Stephen Curry', 'opponent': 'LAL', 'is_home': False, 'stat_type': 'points',
-            'prediction': 29.8, 'confidence_interval': {'lower': 24.3, 'upper': 35.3},
-            'line_analysis': {'recommendation': 'OVER', 'bookmaker_line': 26.5, 'over_probability': 72.1, 'under_probability': 27.9, 'edge': 19.7, 'kelly_criterion': 7.8, 'bet_confidence': 'HIGH'},
-            'regression_stats': {'r_squared': 0.82, 'rmse': 3.4},
-            'season_stats': {'games_played': 42, 'games_used': 42, 'weighted_avg': 28.2, 'std_dev': 5.1, 'min': 16, 'max': 42}
-        },
-        {
-            'player': 'Luka Doncic', 'opponent': 'PHX', 'is_home': True, 'stat_type': 'assists',
-            'prediction': 9.8, 'confidence_interval': {'lower': 7.2, 'upper': 12.4},
-            'line_analysis': {'recommendation': 'OVER', 'bookmaker_line': 8.5, 'over_probability': 68.4, 'under_probability': 31.6, 'edge': 16.0, 'kelly_criterion': 6.1, 'bet_confidence': 'HIGH'},
-            'regression_stats': {'r_squared': 0.79, 'rmse': 1.8},
-            'season_stats': {'games_played': 43, 'games_used': 43, 'weighted_avg': 9.3, 'std_dev': 2.1, 'min': 5, 'max': 14}
-        },
-        {
-            'player': 'Giannis Antetokounmpo', 'opponent': 'BOS', 'is_home': True, 'stat_type': 'rebounds',
-            'prediction': 12.4, 'confidence_interval': {'lower': 9.1, 'upper': 15.7},
-            'line_analysis': {'recommendation': 'OVER', 'bookmaker_line': 10.5, 'over_probability': 71.2, 'under_probability': 28.8, 'edge': 18.8, 'kelly_criterion': 7.2, 'bet_confidence': 'HIGH'},
-            'regression_stats': {'r_squared': 0.85, 'rmse': 2.2},
-            'season_stats': {'games_played': 44, 'games_used': 44, 'weighted_avg': 11.8, 'std_dev': 2.8, 'min': 6, 'max': 18}
-        },
-        {
-            'player': 'Nikola Jokic', 'opponent': 'LAC', 'is_home': False, 'stat_type': 'points',
-            'prediction': 28.2, 'confidence_interval': {'lower': 23.4, 'upper': 33.0},
-            'line_analysis': {'recommendation': 'UNDER', 'bookmaker_line': 30.5, 'over_probability': 38.7, 'under_probability': 61.3, 'edge': 8.9, 'kelly_criterion': 3.2, 'bet_confidence': 'MEDIUM'},
-            'regression_stats': {'r_squared': 0.88, 'rmse': 2.6},
-            'season_stats': {'games_played': 46, 'games_used': 46, 'weighted_avg': 27.9, 'std_dev': 3.9, 'min': 19, 'max': 39}
-        }
-    ]
-    
-    filtered_opps = [opp for opp in fake_opportunities if opp['line_analysis']['edge'] >= min_edge and opp['regression_stats']['r_squared'] >= min_r2]
-    filtered_opps.sort(key=lambda x: x['regression_stats']['r_squared'], reverse=True)
-    
-    return jsonify({
-        'status': 'SUCCESS',
-        'total_props_available': 150,
-        'total_analyzed': 150,
-        'opportunities_found': len(filtered_opps),
-        'scan_time': datetime.now().isoformat(),
-        'days_scanned': 1,
-        'model_type': 'XGBoost (DEMO)',
-        'filters': {'min_edge': min_edge, 'min_r2': min_r2},
-        'opportunities': filtered_opps
-    })
-
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
@@ -577,10 +354,457 @@ if __name__ == '__main__':
     print("\n" + "="*70)
     print("NBA BETTING ANALYZER - API BACKEND")
     print("="*70)
-    print(f"Mode: {'XGBoost ✅' if XGBOOST_AVAILABLE else 'Linear Regression (Fallback)'}")
+    print(f"Mode: {'XGBoost ✅' if XGBOOST_AVAILABLE else '❌'}")
     print(f"Odds API: {'✅' if ODDS_API_AVAILABLE else '❌'}")
     print(f"Port: {port}")
-    print(f"Debug: {debug}")
     print("="*70 + "\n")
     
     app.run(host='0.0.0.0', port=port, debug=debug)
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Morning Brief - Paris NBA FIABLES</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        .container { max-width: 1400px; margin: 0 auto; }
+        .header {
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+        .header h1 {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            font-size: 2.5em;
+            margin-bottom: 5px;
+        }
+        .header p { color: #666; font-size: 1.1em; }
+        .filters {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+        }
+        .filter-row {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            flex-wrap: wrap;
+            margin-bottom: 20px;
+        }
+        .filter-group { display: flex; align-items: center; gap: 10px; }
+        .filter-group label { font-weight: 600; color: #333; }
+        .filter-group input, .filter-group select {
+            padding: 8px 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+        }
+        .button-group {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+        .btn-scan {
+            padding: 15px 25px;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-weight: 700;
+            cursor: pointer;
+            font-size: 1.05em;
+            transition: all 0.3s;
+        }
+        .btn-scan:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.3);
+        }
+        .btn-scan:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        .btn-points { background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); }
+        .btn-assists { background: linear-gradient(135deg, #10b981 0%, #059669 100%); }
+        .btn-rebounds { background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); }
+        .stats-bar {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 15px;
+        }
+        .stat-box { text-align: center; padding: 15px; border-radius: 10px; background: #f8f9fa; }
+        .stat-label { font-size: 0.85em; color: #666; margin-bottom: 5px; }
+        .stat-value { font-size: 2em; font-weight: 800; color: #667eea; }
+        .opportunities-grid { display: grid; gap: 20px; }
+        .opp-card {
+            background: white;
+            border-radius: 15px;
+            padding: 25px;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+            border-left: 6px solid #10b981;
+            position: relative;
+        }
+        .opp-card.under { border-left-color: #ef4444; }
+        .opp-card::before {
+            content: attr(data-rank);
+            position: absolute;
+            top: 15px;
+            right: 15px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 800;
+            font-size: 1.2em;
+        }
+        .opp-header { margin-bottom: 20px; }
+        .opp-player { font-size: 1.8em; font-weight: 800; color: #333; margin-bottom: 5px; }
+        .opp-matchup { color: #666; font-size: 1.1em; margin-bottom: 10px; }
+        .opp-badge {
+            display: inline-block;
+            padding: 8px 20px;
+            border-radius: 20px;
+            font-weight: 700;
+            font-size: 1em;
+            margin-top: 10px;
+        }
+        .opp-badge.over { background: #d1fae5; color: #065f46; }
+        .opp-badge.under { background: #fee2e2; color: #991b1b; }
+        .prediction-box {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            padding: 25px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            color: white;
+        }
+        .pred-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+        .pred-label { font-size: 1em; opacity: 0.9; }
+        .pred-value { font-size: 3em; font-weight: 800; }
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 12px;
+        }
+        .metric {
+            background: rgba(255,255,255,0.2);
+            padding: 15px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        .metric-label { font-size: 0.85em; opacity: 0.9; margin-bottom: 5px; }
+        .metric-value { font-size: 1.5em; font-weight: 700; }
+        .action-box {
+            background: #10b981;
+            padding: 20px;
+            border-radius: 12px;
+            color: white;
+            margin-top: 20px;
+        }
+        .action-box.under { background: #ef4444; }
+        .action-title { font-size: 1.2em; font-weight: 700; margin-bottom: 10px; }
+        .action-detail { font-size: 1.1em; }
+        .loading {
+            text-align: center;
+            padding: 60px;
+            background: white;
+            border-radius: 15px;
+            box-shadow: 0 8px 20px rgba(0,0,0,0.15);
+        }
+        .spinner {
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid #667eea;
+            border-radius: 50%;
+            width: 60px;
+            height: 60px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .hidden { display: none; }
+        .error {
+            background: #fee2e2;
+            border: 3px solid #fca5a5;
+            color: #991b1b;
+            padding: 25px;
+            border-radius: 15px;
+            text-align: center;
+        }
+        .info-banner {
+            background: #dbeafe;
+            border: 2px solid #3b82f6;
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            color: #1e40af;
+        }
+        .info-banner strong { color: #1e3a8a; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎯 Paris NBA ULTRA-FIABLES</h1>
+            <p>Prédictions XGBoost - Données en temps réel</p>
+        </div>
+
+        <div class="info-banner">
+            <strong>🎲 Scan Aléatoire + Séparé</strong><br>
+            Chaque bouton analyse 25 props ALÉATOIRES d'un type spécifique.<br>
+            Temps: 30-90 secondes par scan. Données: Odds-API + NBA Stats en direct.
+        </div>
+
+        <div class="filters">
+            <div class="filter-row">
+                <div class="filter-group">
+                    <label>R² minimum:</label>
+                    <select id="minR2">
+                        <option value="0.70">0.70 (bon)</option>
+                        <option value="0.75">0.75 (très bon)</option>
+                        <option value="0.80" selected>0.80 (excellent)</option>
+                        <option value="0.85">0.85 (exceptionnel)</option>
+                    </select>
+                </div>
+                <div class="filter-group">
+                    <label>Edge minimum:</label>
+                    <input type="number" id="minEdge" value="5" min="0" max="20" step="0.5">
+                    <span>%</span>
+                </div>
+            </div>
+            
+            <div class="button-group">
+                <button class="btn-scan btn-points" onclick="scanOpportunities('points')">
+                    🏀 Scanner POINTS (25 random)
+                </button>
+                <button class="btn-scan btn-assists" onclick="scanOpportunities('assists')">
+                    🎯 Scanner ASSISTS (25 random)
+                </button>
+                <button class="btn-scan btn-rebounds" onclick="scanOpportunities('rebounds')">
+                    💪 Scanner REBOUNDS (25 random)
+                </button>
+            </div>
+        </div>
+
+        <div id="statsBar" class="stats-bar hidden">
+            <div class="stat-box">
+                <div class="stat-label">Type analysé</div>
+                <div class="stat-value" id="statType">-</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-label">Props scannées</div>
+                <div class="stat-value" id="analyzedProps">-</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-label">Opportunités trouvées</div>
+                <div class="stat-value" id="foundOpps">-</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-label">R² moyen</div>
+                <div class="stat-value" id="avgR2">-</div>
+            </div>
+        </div>
+
+        <div id="loadingDiv" class="loading hidden">
+            <div class="spinner"></div>
+            <h3>Scan en cours...</h3>
+            <p>Analyse de 25 props aléatoires (30-90 sec)</p>
+        </div>
+
+        <div id="resultsDiv" class="opportunities-grid hidden"></div>
+
+        <div id="errorDiv" class="error hidden"></div>
+    </div>
+
+    <script>
+        const API_URL = 'https://nba-stats-xcyv.onrender.com';
+
+        async function scanOpportunities(statType) {
+            const minEdge = document.getElementById('minEdge').value;
+            const minR2 = parseFloat(document.getElementById('minR2').value);
+
+            // Disable tous les boutons
+            document.querySelectorAll('.btn-scan').forEach(btn => btn.disabled = true);
+
+            document.getElementById('loadingDiv').classList.remove('hidden');
+            document.getElementById('statsBar').classList.add('hidden');
+            document.getElementById('resultsDiv').classList.add('hidden');
+            document.getElementById('errorDiv').classList.add('hidden');
+
+            const endpoints = {
+                'points': 'daily-opportunities-points',
+                'assists': 'daily-opportunities-assists',
+                'rebounds': 'daily-opportunities-rebounds'
+            };
+
+            try {
+                const response = await fetch(
+                    `${API_URL}/api/${endpoints[statType]}?min_edge=${minEdge}&min_r2=${minR2}`,
+                    { timeout: 120000 }
+                );
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+                }
+
+                const data = await response.json();
+
+                if (data.status === 'SUCCESS') {
+                    displayResults(data, statType);
+                } else {
+                    displayError(data.message || 'Erreur inconnue');
+                }
+            } catch (error) {
+                console.error('Scan error:', error);
+                displayError(`Erreur: ${error.message}`);
+            } finally {
+                document.getElementById('loadingDiv').classList.add('hidden');
+                // Re-enable boutons
+                document.querySelectorAll('.btn-scan').forEach(btn => btn.disabled = false);
+            }
+        }
+
+        function displayResults(data, statType) {
+            const opportunities = data.opportunities || [];
+            
+            document.getElementById('statsBar').classList.remove('hidden');
+            document.getElementById('statType').textContent = statType.toUpperCase();
+            document.getElementById('analyzedProps').textContent = data.total_analyzed;
+            document.getElementById('foundOpps').textContent = opportunities.length;
+            
+            if (opportunities.length > 0) {
+                const avgR2 = opportunities.reduce((sum, o) => 
+                    sum + (o.regression_stats?.r_squared || 0), 0) / opportunities.length;
+                document.getElementById('avgR2').textContent = avgR2.toFixed(3);
+            }
+
+            if (opportunities.length === 0) {
+                displayError('Aucun pari trouvé avec ces filtres. Essaie de baisser R² ou Edge.');
+                return;
+            }
+            
+            const resultsDiv = document.getElementById('resultsDiv');
+            resultsDiv.innerHTML = opportunities.map((opp, index) => 
+                createOpportunityCard(opp, index + 1)
+            ).join('');
+            resultsDiv.classList.remove('hidden');
+        }
+
+        function getTeamName(abbr) {
+            const teams = {
+                'ATL': 'Atlanta Hawks', 'BOS': 'Boston Celtics', 'BKN': 'Brooklyn Nets',
+                'CHA': 'Charlotte Hornets', 'CHI': 'Chicago Bulls', 'CLE': 'Cleveland Cavaliers',
+                'DAL': 'Dallas Mavericks', 'DEN': 'Denver Nuggets', 'DET': 'Detroit Pistons',
+                'GSW': 'Golden State Warriors', 'HOU': 'Houston Rockets', 'IND': 'Indiana Pacers',
+                'LAC': 'LA Clippers', 'LAL': 'LA Lakers', 'MEM': 'Memphis Grizzlies',
+                'MIA': 'Miami Heat', 'MIL': 'Milwaukee Bucks', 'MIN': 'Minnesota Timberwolves',
+                'NOP': 'New Orleans Pelicans', 'NYK': 'New York Knicks', 'OKC': 'Oklahoma City Thunder',
+                'ORL': 'Orlando Magic', 'PHI': 'Philadelphia 76ers', 'PHX': 'Phoenix Suns',
+                'POR': 'Portland Trail Blazers', 'SAC': 'Sacramento Kings', 'SAS': 'San Antonio Spurs',
+                'TOR': 'Toronto Raptors', 'UTA': 'Utah Jazz', 'WAS': 'Washington Wizards'
+            };
+            return teams[abbr] || abbr;
+        }
+
+        function createOpportunityCard(opp, rank) {
+            const rec = opp.line_analysis.recommendation;
+            const recClass = rec.toLowerCase();
+            const edge = opp.line_analysis.edge;
+            const kelly = opp.line_analysis.kelly_criterion;
+            const r2 = opp.regression_stats?.r_squared || 0;
+            const rmse = opp.regression_stats?.rmse || 0;
+
+            const statLabel = {
+                'points': 'Points',
+                'assists': 'Assists',
+                'rebounds': 'Rebounds'
+            }[opp.stat_type];
+
+            const teamName = getTeamName(opp.opponent);
+
+            return `
+                <div class="opp-card ${recClass}" data-rank="${rank}">
+                    <div class="opp-header">
+                        <div class="opp-player">${opp.player}</div>
+                        <div class="opp-matchup">
+                            ${opp.is_home ? '🏠 vs' : '✈️ @'} ${teamName} • ${statLabel}
+                        </div>
+                        <div class="opp-badge ${recClass}">
+                            ${rec} ${opp.line_analysis.bookmaker_line}
+                        </div>
+                    </div>
+
+                    <div class="prediction-box">
+                        <div class="pred-row">
+                            <div>
+                                <div class="pred-label">Prédiction modèle</div>
+                                <div class="pred-value">${opp.prediction}</div>
+                            </div>
+                            <div style="text-align: right;">
+                                <div class="pred-label">vs Ligne</div>
+                                <div class="pred-value">${opp.line_analysis.bookmaker_line}</div>
+                            </div>
+                        </div>
+                        
+                        <div class="metrics-grid">
+                            <div class="metric">
+                                <div class="metric-label">🎯 R² (Fiabilité)</div>
+                                <div class="metric-value">${(r2 * 100).toFixed(1)}%</div>
+                            </div>
+                            <div class="metric">
+                                <div class="metric-label">📊 RMSE</div>
+                                <div class="metric-value">${rmse.toFixed(1)}</div>
+                            </div>
+                            <div class="metric">
+                                <div class="metric-label">💰 Edge</div>
+                                <div class="metric-value">+${edge.toFixed(1)}%</div>
+                            </div>
+                            <div class="metric">
+                                <div class="metric-label">📈 Kelly</div>
+                                <div class="metric-value">${kelly.toFixed(1)}%</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="action-box ${recClass}">
+                        <div class="action-title">🎯 ACTION À PRENDRE</div>
+                        <div class="action-detail">
+                            ➤ Parier <strong>${rec} ${opp.line_analysis.bookmaker_line}</strong><br>
+                            ➤ Mise recommandée: <strong>${kelly.toFixed(1)}%</strong> de ta bankroll<br>
+                            ➤ Fiabilité du modèle: <strong>${(r2 * 100).toFixed(0)}%</strong>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        function displayError(message) {
+            const errorDiv = document.getElementById('errorDiv');
+            errorDiv.textContent = `❌ ${message}`;
+            errorDiv.classList.remove('hidden');
+        }
+    </script>
+</body>
+</html> 
