@@ -319,32 +319,7 @@ def scan_opportunities_by_type(stat_type, limit=25):
 
 
 # ============================================================================
-# AUTRES ENDPOINTS
-# ============================================================================
-
-@app.route('/api/health', methods=['GET'])
-def health_check():
-    """Health check"""
-    return jsonify({
-        'status': 'OK',
-        'xgboost_enabled': XGBOOST_AVAILABLE,
-        'odds_api_enabled': ODDS_API_AVAILABLE,
-        'timestamp': datetime.now().isoformat()
-    })
-
-
-@app.route('/api/odds/usage', methods=['GET'])
-def get_odds_usage():
-    """Utilisation API odds"""
-    if ODDS_API_AVAILABLE and odds_client:
-        usage = odds_client.get_usage_stats()
-        return jsonify(usage)
-    
-    return jsonify({'error': 'Odds API not available'}), 503
-
-
-# ============================================================================
-# MAIN
+# DEBUG ENDPOINT
 # ============================================================================
 
 @app.route('/api/debug-odds', methods=['GET'])
@@ -403,20 +378,36 @@ def debug_odds():
             'traceback': traceback.format_exc(),
             'debug': debug_info
         })
-```
 
----
 
-## **🚀 ÉTAPES:**
+# ============================================================================
+# AUTRES ENDPOINTS
+# ============================================================================
 
-### **1. Commit ce code sur GitHub**
+@app.route('/api/health', methods=['GET'])
+def health_check():
+    """Health check"""
+    return jsonify({
+        'status': 'OK',
+        'xgboost_enabled': XGBOOST_AVAILABLE,
+        'odds_api_enabled': ODDS_API_AVAILABLE,
+        'timestamp': datetime.now().isoformat()
+    })
 
-### **2. Attends que Render redéploie (2-3 min)**
 
-### **3. Ouvre cette URL dans ton navigateur:**
-```
-https://nba-stats-xcyv.onrender.com/api/debug-odds
+@app.route('/api/odds/usage', methods=['GET'])
+def get_odds_usage():
+    """Utilisation API odds"""
+    if ODDS_API_AVAILABLE and odds_client:
+        usage = odds_client.get_usage_stats()
+        return jsonify(usage)
+    
+    return jsonify({'error': 'Odds API not available'}), 503
 
+
+# ============================================================================
+# MAIN
+# ============================================================================
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
