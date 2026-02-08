@@ -506,6 +506,70 @@ def health_check():
 # MAIN
 # ============================================================================
 
+
+# ============================================================================
+# ENDPOINT DEMO - PROPS SIMULÉES
+# ============================================================================
+
+@app.route('/api/daily-opportunities-demo', methods=['GET'])
+def daily_opportunities_demo():
+    min_edge = request.args.get('min_edge', 5.0, type=float)
+    min_r2 = request.args.get('min_r2', 0.70, type=float)
+    
+    fake_opportunities = [
+        {
+            'player': 'LeBron James', 'opponent': 'GSW', 'is_home': True, 'stat_type': 'points',
+            'prediction': 27.3, 'confidence_interval': {'lower': 22.1, 'upper': 32.5},
+            'line_analysis': {'recommendation': 'OVER', 'bookmaker_line': 25.5, 'over_probability': 67.2, 'under_probability': 32.8, 'edge': 14.7, 'kelly_criterion': 5.3, 'bet_confidence': 'HIGH'},
+            'regression_stats': {'r_squared': 0.87, 'rmse': 2.8},
+            'season_stats': {'games_played': 45, 'games_used': 45, 'weighted_avg': 26.8, 'std_dev': 4.2, 'min': 18, 'max': 38}
+        },
+        {
+            'player': 'Stephen Curry', 'opponent': 'LAL', 'is_home': False, 'stat_type': 'points',
+            'prediction': 29.8, 'confidence_interval': {'lower': 24.3, 'upper': 35.3},
+            'line_analysis': {'recommendation': 'OVER', 'bookmaker_line': 26.5, 'over_probability': 72.1, 'under_probability': 27.9, 'edge': 19.7, 'kelly_criterion': 7.8, 'bet_confidence': 'HIGH'},
+            'regression_stats': {'r_squared': 0.82, 'rmse': 3.4},
+            'season_stats': {'games_played': 42, 'games_used': 42, 'weighted_avg': 28.2, 'std_dev': 5.1, 'min': 16, 'max': 42}
+        },
+        {
+            'player': 'Luka Doncic', 'opponent': 'PHX', 'is_home': True, 'stat_type': 'assists',
+            'prediction': 9.8, 'confidence_interval': {'lower': 7.2, 'upper': 12.4},
+            'line_analysis': {'recommendation': 'OVER', 'bookmaker_line': 8.5, 'over_probability': 68.4, 'under_probability': 31.6, 'edge': 16.0, 'kelly_criterion': 6.1, 'bet_confidence': 'HIGH'},
+            'regression_stats': {'r_squared': 0.79, 'rmse': 1.8},
+            'season_stats': {'games_played': 43, 'games_used': 43, 'weighted_avg': 9.3, 'std_dev': 2.1, 'min': 5, 'max': 14}
+        },
+        {
+            'player': 'Giannis Antetokounmpo', 'opponent': 'BOS', 'is_home': True, 'stat_type': 'rebounds',
+            'prediction': 12.4, 'confidence_interval': {'lower': 9.1, 'upper': 15.7},
+            'line_analysis': {'recommendation': 'OVER', 'bookmaker_line': 10.5, 'over_probability': 71.2, 'under_probability': 28.8, 'edge': 18.8, 'kelly_criterion': 7.2, 'bet_confidence': 'HIGH'},
+            'regression_stats': {'r_squared': 0.85, 'rmse': 2.2},
+            'season_stats': {'games_played': 44, 'games_used': 44, 'weighted_avg': 11.8, 'std_dev': 2.8, 'min': 6, 'max': 18}
+        },
+        {
+            'player': 'Nikola Jokic', 'opponent': 'LAC', 'is_home': False, 'stat_type': 'points',
+            'prediction': 28.2, 'confidence_interval': {'lower': 23.4, 'upper': 33.0},
+            'line_analysis': {'recommendation': 'UNDER', 'bookmaker_line': 30.5, 'over_probability': 38.7, 'under_probability': 61.3, 'edge': 8.9, 'kelly_criterion': 3.2, 'bet_confidence': 'MEDIUM'},
+            'regression_stats': {'r_squared': 0.88, 'rmse': 2.6},
+            'season_stats': {'games_played': 46, 'games_used': 46, 'weighted_avg': 27.9, 'std_dev': 3.9, 'min': 19, 'max': 39}
+        }
+    ]
+    
+    filtered_opps = [opp for opp in fake_opportunities if opp['line_analysis']['edge'] >= min_edge and opp['regression_stats']['r_squared'] >= min_r2]
+    filtered_opps.sort(key=lambda x: x['regression_stats']['r_squared'], reverse=True)
+    
+    return jsonify({
+        'status': 'SUCCESS',
+        'total_props_available': 150,
+        'total_analyzed': 150,
+        'opportunities_found': len(filtered_opps),
+        'scan_time': datetime.now().isoformat(),
+        'days_scanned': 1,
+        'model_type': 'XGBoost (DEMO)',
+        'filters': {'min_edge': min_edge, 'min_r2': min_r2},
+        'opportunities': filtered_opps
+    })
+
+
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     debug = os.environ.get('DEBUG', 'False').lower() == 'true'
