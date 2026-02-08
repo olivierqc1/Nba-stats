@@ -187,6 +187,7 @@ def daily_opportunities_rebounds():
 def scan_opportunities_by_type(stat_type, limit=25):
     """
     Scan opportunités pour UN type de stat avec randomisation
+    FIX: Utilise 'stat_type' au lieu de 'market'
     """
     
     min_edge = request.args.get('min_edge', 5.0, type=float)
@@ -212,22 +213,26 @@ def scan_opportunities_by_type(stat_type, limit=25):
         # Récupère TOUTES les props
         all_props = odds_client.get_player_props(days=1)
         
-        # Map stat type to market name
-        stat_map = {
-            'points': 'player_points',
-            'assists': 'player_assists', 
-            'rebounds': 'player_rebounds'
-        }
-        
-        market_name = stat_map.get(stat_type)
-        
-        # Filtre par stat_type
+        # ✅ FIX: Filtre par 'stat_type' directement (pas 'market')
         filtered_props = [
             p for p in all_props 
-            if p.get('market') == market_name
+            if p.get('stat_type') == stat_type
         ]
         
         print(f"📊 Total {stat_type} available: {len(filtered_props)}")
+        
+        if len(filtered_props) == 0:
+            return jsonify({
+                'status': 'SUCCESS',
+                'stat_type': stat_type,
+                'total_available': 0,
+                'total_analyzed': 0,
+                'opportunities_found': 0,
+                'scan_time': datetime.now().isoformat(),
+                'model_type': 'XGBoost',
+                'message': f'Aucune prop {stat_type} disponible aujourd\'hui',
+                'opportunities': []
+            })
         
         # RANDOMISE et limite
         random.shuffle(filtered_props)
@@ -239,8 +244,8 @@ def scan_opportunities_by_type(stat_type, limit=25):
         analyzed_count = 0
         
         for prop in selected_props:
-            player = prop['player']
-            line = prop['line']
+            player = prop.get('player', 'Unknown')
+            line = prop.get('line', 0)
             opponent = prop.get('away_team', 'Unknown')
             is_home = bool(prop.get('home_team'))
             
@@ -350,11 +355,11 @@ def debug_odds():
         # Analyse les résultats
         total_props = len(raw_props)
         
-        # Compte par market
-        markets = {}
+        # Compte par stat_type (FIX)
+        stat_types = {}
         for prop in raw_props:
-            market = prop.get('market', 'unknown')
-            markets[market] = markets.get(market, 0) + 1
+            st = prop.get('stat_type', 'unknown')
+            stat_types[st] = stat_types.get(st, 0) + 1
         
         # Sample de props
         sample_props = raw_props[:3] if raw_props else []
@@ -364,7 +369,7 @@ def debug_odds():
             'debug': debug_info,
             'results': {
                 'total_props': total_props,
-                'markets_found': markets,
+                'stat_types_found': stat_types,
                 'sample_props': sample_props,
                 'first_prop_structure': raw_props[0] if raw_props else None
             }
