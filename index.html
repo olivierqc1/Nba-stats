@@ -142,6 +142,15 @@
         }
         .pred-label { font-size: 1em; opacity: 0.9; }
         .pred-value { font-size: 3em; font-weight: 800; }
+        .confidence-interval {
+            background: rgba(255,255,255,0.15);
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 15px;
+            text-align: center;
+        }
+        .confidence-interval-label { font-size: 0.9em; opacity: 0.9; margin-bottom: 8px; }
+        .confidence-interval-range { font-size: 1.3em; font-weight: 700; }
         .metrics-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
@@ -165,6 +174,74 @@
         .action-box.under { background: #ef4444; }
         .action-title { font-size: 1.2em; font-weight: 700; margin-bottom: 10px; }
         .action-detail { font-size: 1.1em; }
+        .technical-details {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 20px;
+            margin-top: 20px;
+        }
+        .technical-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            margin-bottom: 15px;
+        }
+        .technical-title {
+            font-size: 1.1em;
+            font-weight: 700;
+            color: #333;
+        }
+        .toggle-icon {
+            font-size: 1.5em;
+            color: #667eea;
+            transition: transform 0.3s;
+        }
+        .toggle-icon.open {
+            transform: rotate(180deg);
+        }
+        .technical-content {
+            display: none;
+        }
+        .technical-content.open {
+            display: block;
+        }
+        .prob-table {
+            width: 100%;
+            margin-top: 15px;
+            border-collapse: collapse;
+        }
+        .prob-table th {
+            background: #667eea;
+            color: white;
+            padding: 10px;
+            text-align: center;
+        }
+        .prob-table td {
+            padding: 10px;
+            text-align: center;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        .prob-table tr:hover {
+            background: #f0f0f0;
+        }
+        .bet-range {
+            background: #dbeafe;
+            border: 2px solid #3b82f6;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 15px;
+        }
+        .bet-range-title {
+            font-weight: 700;
+            color: #1e40af;
+            margin-bottom: 8px;
+        }
+        .bet-range-value {
+            font-size: 1.3em;
+            color: #1e3a8a;
+            font-weight: 700;
+        }
         .loading {
             text-align: center;
             padding: 60px;
@@ -210,9 +287,8 @@
         </div>
 
         <div class="info-banner">
-            <strong>🎲 Scan Aléatoire + Séparé</strong><br>
-            Chaque bouton analyse 25 props ALÉATOIRES d'un type spécifique.<br>
-            Temps: 30-90 secondes par scan. Données: Odds-API + NBA Stats en direct.
+            <strong>🎲 Scan Aléatoire + Détails Techniques</strong><br>
+            Analyse 25 props aléatoires. Clique sur "Détails" pour voir l'intervalle de confiance et les probabilités.
         </div>
 
         <div class="filters">
@@ -276,176 +352,6 @@
         <div id="errorDiv" class="error hidden"></div>
     </div>
 
-    <script>
-        const API_URL = 'https://nba-stats-xcyv.onrender.com';
-
-        async function scanOpportunities(statType) {
-            const minEdge = document.getElementById('minEdge').value;
-            const minR2 = parseFloat(document.getElementById('minR2').value);
-
-            // Disable tous les boutons
-            document.querySelectorAll('.btn-scan').forEach(btn => btn.disabled = true);
-
-            document.getElementById('loadingDiv').classList.remove('hidden');
-            document.getElementById('statsBar').classList.add('hidden');
-            document.getElementById('resultsDiv').classList.add('hidden');
-            document.getElementById('errorDiv').classList.add('hidden');
-
-            const endpoints = {
-                'points': 'daily-opportunities-points',
-                'assists': 'daily-opportunities-assists',
-                'rebounds': 'daily-opportunities-rebounds'
-            };
-
-            try {
-                const response = await fetch(
-                    `${API_URL}/api/${endpoints[statType]}?min_edge=${minEdge}&min_r2=${minR2}`,
-                    { timeout: 120000 }
-                );
-
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-                }
-
-                const data = await response.json();
-
-                if (data.status === 'SUCCESS') {
-                    displayResults(data, statType);
-                } else {
-                    displayError(data.message || 'Erreur inconnue');
-                }
-            } catch (error) {
-                console.error('Scan error:', error);
-                displayError(`Erreur: ${error.message}`);
-            } finally {
-                document.getElementById('loadingDiv').classList.add('hidden');
-                // Re-enable boutons
-                document.querySelectorAll('.btn-scan').forEach(btn => btn.disabled = false);
-            }
-        }
-
-        function displayResults(data, statType) {
-            const opportunities = data.opportunities || [];
-            
-            document.getElementById('statsBar').classList.remove('hidden');
-            document.getElementById('statType').textContent = statType.toUpperCase();
-            document.getElementById('analyzedProps').textContent = data.total_analyzed;
-            document.getElementById('foundOpps').textContent = opportunities.length;
-            
-            if (opportunities.length > 0) {
-                const avgR2 = opportunities.reduce((sum, o) => 
-                    sum + (o.regression_stats?.r_squared || 0), 0) / opportunities.length;
-                document.getElementById('avgR2').textContent = avgR2.toFixed(3);
-            }
-
-            if (opportunities.length === 0) {
-                displayError('Aucun pari trouvé avec ces filtres. Essaie de baisser R² ou Edge.');
-                return;
-            }
-            
-            const resultsDiv = document.getElementById('resultsDiv');
-            resultsDiv.innerHTML = opportunities.map((opp, index) => 
-                createOpportunityCard(opp, index + 1)
-            ).join('');
-            resultsDiv.classList.remove('hidden');
-        }
-
-        function getTeamName(abbr) {
-            const teams = {
-                'ATL': 'Atlanta Hawks', 'BOS': 'Boston Celtics', 'BKN': 'Brooklyn Nets',
-                'CHA': 'Charlotte Hornets', 'CHI': 'Chicago Bulls', 'CLE': 'Cleveland Cavaliers',
-                'DAL': 'Dallas Mavericks', 'DEN': 'Denver Nuggets', 'DET': 'Detroit Pistons',
-                'GSW': 'Golden State Warriors', 'HOU': 'Houston Rockets', 'IND': 'Indiana Pacers',
-                'LAC': 'LA Clippers', 'LAL': 'LA Lakers', 'MEM': 'Memphis Grizzlies',
-                'MIA': 'Miami Heat', 'MIL': 'Milwaukee Bucks', 'MIN': 'Minnesota Timberwolves',
-                'NOP': 'New Orleans Pelicans', 'NYK': 'New York Knicks', 'OKC': 'Oklahoma City Thunder',
-                'ORL': 'Orlando Magic', 'PHI': 'Philadelphia 76ers', 'PHX': 'Phoenix Suns',
-                'POR': 'Portland Trail Blazers', 'SAC': 'Sacramento Kings', 'SAS': 'San Antonio Spurs',
-                'TOR': 'Toronto Raptors', 'UTA': 'Utah Jazz', 'WAS': 'Washington Wizards'
-            };
-            return teams[abbr] || abbr;
-        }
-
-        function createOpportunityCard(opp, rank) {
-            const rec = opp.line_analysis.recommendation;
-            const recClass = rec.toLowerCase();
-            const edge = opp.line_analysis.edge;
-            const kelly = opp.line_analysis.kelly_criterion;
-            const r2 = opp.regression_stats?.r_squared || 0;
-            const rmse = opp.regression_stats?.rmse || 0;
-
-            const statLabel = {
-                'points': 'Points',
-                'assists': 'Assists',
-                'rebounds': 'Rebounds'
-            }[opp.stat_type];
-
-            const teamName = getTeamName(opp.opponent);
-
-            return `
-                <div class="opp-card ${recClass}" data-rank="${rank}">
-                    <div class="opp-header">
-                        <div class="opp-player">${opp.player}</div>
-                        <div class="opp-matchup">
-                            ${opp.is_home ? '🏠 vs' : '✈️ @'} ${teamName} • ${statLabel}
-                        </div>
-                        <div class="opp-badge ${recClass}">
-                            ${rec} ${opp.line_analysis.bookmaker_line}
-                        </div>
-                    </div>
-
-                    <div class="prediction-box">
-                        <div class="pred-row">
-                            <div>
-                                <div class="pred-label">Prédiction modèle</div>
-                                <div class="pred-value">${opp.prediction}</div>
-                            </div>
-                            <div style="text-align: right;">
-                                <div class="pred-label">vs Ligne</div>
-                                <div class="pred-value">${opp.line_analysis.bookmaker_line}</div>
-                            </div>
-                        </div>
-                        
-                        <div class="metrics-grid">
-                            <div class="metric">
-                                <div class="metric-label">🎯 R² (Fiabilité)</div>
-                                <div class="metric-value">${(r2 * 100).toFixed(1)}%</div>
-                            </div>
-                            <div class="metric">
-                                <div class="metric-label">📊 RMSE</div>
-                                <div class="metric-value">${rmse.toFixed(1)}</div>
-                            </div>
-                            <div class="metric">
-                                <div class="metric-label">💰 Edge</div>
-                                <div class="metric-value">+${edge.toFixed(1)}%</div>
-                            </div>
-                            <div class="metric">
-                                <div class="metric-label">📈 Kelly</div>
-                                <div class="metric-value">${kelly.toFixed(1)}%</div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="action-box ${recClass}">
-                        <div class="action-title">🎯 ACTION À PRENDRE</div>
-                        <div class="action-detail">
-                            ➤ Parier <strong>${rec} ${opp.line_analysis.bookmaker_line}</strong><br>
-                            ➤ Mise recommandée: <strong>${kelly.toFixed(1)}%</strong> de ta bankroll<br>
-                            ➤ Fiabilité du modèle: <strong>${(r2 * 100).toFixed(0)}%</strong>
-                        </div>
-                    </div>
-                </div>
-            `;
-        }
-
-        function displayError(message) {
-            const errorDiv = document.getElementById('errorDiv');
-            errorDiv.textContent = `❌ ${message}`;
-            errorDiv.classList.remove('hidden');
-        }
-    </script>
-</body>
-</html> 
 <script>
         const API_URL = 'https://nba-stats-xcyv.onrender.com';
 
