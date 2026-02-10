@@ -413,23 +413,25 @@
     <div class="container">
         <div class="header">
             <h1>🎯 Paris NBA ULTRA-FIABLES</h1>
-            <p>Prédictions XGBoost - Données en temps réel</p>
+            <p>Prédictions XGBoost - Test R² RÉEL (pas train!)</p>
         </div>
 
         <div class="info-banner">
-            <strong>🎲 Scan 15 props + Historique</strong><br>
-            Clique sur le nom d'un joueur pour voir ses 10 derniers matchs et tendances.
+            <strong>🎲 Nouveau: R² = TEST R² (VRAI performance!)</strong><br>
+            R² affiché = performance sur matchs FUTURS jamais vus.<br>
+            Clique sur le nom d'un joueur pour voir ses 10 derniers matchs.
         </div>
 
         <div class="filters">
             <div class="filter-row">
                 <div class="filter-group">
-                    <label>R² minimum:</label>
+                    <label>R² TEST minimum:</label>
                     <select id="minR2">
-                        <option value="0.70">0.70 (bon)</option>
-                        <option value="0.75">0.75 (très bon)</option>
-                        <option value="0.80" selected>0.80 (excellent)</option>
-                        <option value="0.85">0.85 (exceptionnel)</option>
+                        <option value="0.30">0.30 (test - permissif)</option>
+                        <option value="0.50" selected>0.50 (modéré - RECOMMANDÉ)</option>
+                        <option value="0.60">0.60 (bon)</option>
+                        <option value="0.70">0.70 (très bon)</option>
+                        <option value="0.80">0.80 (excellent - strict)</option>
                     </select>
                 </div>
                 <div class="filter-group">
@@ -466,7 +468,7 @@
                 <div class="stat-value" id="foundOpps">-</div>
             </div>
             <div class="stat-box">
-                <div class="stat-label">R² moyen</div>
+                <div class="stat-label">R² TEST moyen</div>
                 <div class="stat-value" id="avgR2">-</div>
             </div>
         </div>
@@ -494,7 +496,6 @@
             </div>
         </div>
     </div>
-
 <script>
         const API_URL = 'https://nba-stats-xcyv.onrender.com';
 
@@ -568,7 +569,7 @@
             }
 
             if (opportunities.length === 0) {
-                displayError('Aucun pari trouvé avec ces filtres. Essaie de baisser R² à 0.70 ou Edge à 3%.');
+                displayError(`Aucun pari trouvé avec R² ≥ ${document.getElementById('minR2').value} et Edge ≥ ${document.getElementById('minEdge').value}%. Essaie de baisser R² à 0.30 ou Edge à 3%.`);
                 return;
             }
             
@@ -815,7 +816,7 @@
                         
                         <div class="metrics-grid">
                             <div class="metric">
-                                <div class="metric-label">🎯 R²</div>
+                                <div class="metric-label">🎯 R² TEST</div>
                                 <div class="metric-value">${(r2 * 100).toFixed(1)}%</div>
                             </div>
                             <div class="metric">
@@ -838,7 +839,7 @@
                         <div class="action-detail">
                             ➤ Parier <strong>${rec} ${line}</strong><br>
                             ➤ Mise recommandée: <strong>${kelly.toFixed(1)}%</strong> de ta bankroll<br>
-                            ➤ Fiabilité du modèle: <strong>${(r2 * 100).toFixed(0)}%</strong>
+                            ➤ R² TEST (vrai): <strong>${(r2 * 100).toFixed(0)}%</strong> (performance réelle!)
                         </div>
                     </div>
                     
@@ -883,7 +884,8 @@
                                 • Performance vs équipe adverse<br>
                                 • Minutes jouées (trend)<br>
                                 • Home/Away advantage<br>
-                                • Form récente (10 matchs)
+                                • Form récente (10 matchs)<br>
+                                <strong style="color: #667eea;">⚠️ R² = TEST R² (matchs jamais vus!)</strong>
                             </div>
                         </div>
                     </div>
