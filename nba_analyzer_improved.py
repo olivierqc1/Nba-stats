@@ -191,7 +191,7 @@ def scan_opportunities_by_type(stat_type, limit=15):
     """
     
     min_edge = request.args.get('min_edge', 5.0, type=float)
-    min_r2 = request.args.get('min_r2', 0.70, type=float)
+    min_r2 = request.args.get('min_r2', 0.50, type=float)
     
     if not ODDS_API_AVAILABLE or not odds_client:
         return jsonify({
