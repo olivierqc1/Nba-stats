@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 NBA Betting Analyzer - API Backend avec XGBoost
-VERSION OPTIMISÉE: 3 endpoints séparés + randomisation
+VERSION OPTIMISÉE: 3 endpoints séparés + randomisation + player history
 """
 
 import os
@@ -315,6 +315,93 @@ def scan_opportunities_by_type(stat_type, limit=25):
     
     except Exception as e:
         print(f"❌ SCAN ERROR: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'status': 'ERROR',
+            'message': str(e)
+        }), 500
+# ============================================================================
+# PLAYER HISTORY ENDPOINT
+# ============================================================================
+
+@app.route('/api/player-history/<player_name>', methods=['GET'])
+def get_player_history(player_name):
+    """Récupère les 10 derniers matchs d'un joueur"""
+    
+    if not XGBOOST_AVAILABLE or not collector:
+        return jsonify({
+            'status': 'ERROR',
+            'message': 'Data collector not available'
+        }), 503
+    
+    try:
+        print(f"📊 Fetching history for {player_name}")
+        
+        # Récupère les données complètes
+        df = collector.get_complete_player_data(player_name)
+        
+        if df is None or len(df) == 0:
+            return jsonify({
+                'status': 'ERROR',
+                'message': f'No data found for {player_name}'
+            }), 404
+        
+        # Trie par date (plus récent en premier)
+        df = df.sort_values('GAME_DATE', ascending=False)
+        
+        # Prend les 10 derniers matchs
+        recent_games = df.head(10)
+        
+        # Prépare les données
+        games = []
+        for _, row in recent_games.iterrows():
+            games.append({
+                'date': row['GAME_DATE'],
+                'opponent': row['MATCHUP'].split()[-1],
+                'is_home': 'vs' in row['MATCHUP'],
+                'points': int(row['PTS']),
+                'assists': int(row['AST']),
+                'rebounds': int(row['REB']),
+                'minutes': int(row['MIN']),
+                'result': 'W' if row.get('WL', '') == 'W' else 'L'
+            })
+        
+        # Calcule les tendances
+        pts_last_5 = df.head(5)['PTS'].mean()
+        pts_prev_5 = df.iloc[5:10]['PTS'].mean() if len(df) >= 10 else df['PTS'].mean()
+        pts_trend = pts_last_5 - pts_prev_5
+        
+        # Form récente (W-L record)
+        recent_wl = df.head(5)['WL'].value_counts().to_dict() if 'WL' in df.columns else {}
+        wins = recent_wl.get('W', 0)
+        losses = recent_wl.get('L', 0)
+        
+        # Minutes trend
+        min_last_5 = df.head(5)['MIN'].mean()
+        min_stable = df.head(10)['MIN'].std() < 3
+        
+        return jsonify({
+            'status': 'SUCCESS',
+            'player': player_name,
+            'games': games,
+            'stats': {
+                'games_played': len(df),
+                'avg_points': round(df['PTS'].mean(), 1),
+                'avg_assists': round(df['AST'].mean(), 1),
+                'avg_rebounds': round(df['REB'].mean(), 1),
+                'avg_minutes': round(df['MIN'].mean(), 1)
+            },
+            'trends': {
+                'points_trend': round(pts_trend, 1),
+                'form': f"{wins}W-{losses}L",
+                'minutes_avg': round(min_last_5, 1),
+                'minutes_stable': min_stable
+            }
+        })
+    
+    except Exception as e:
+        print(f"❌ Error fetching player history: {e}")
         import traceback
         traceback.print_exc()
         return jsonify({
