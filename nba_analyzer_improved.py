@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 NBA Betting Analyzer - API Backend avec XGBoost
-VERSION OPTIMISÉE: 3 endpoints séparés + randomisation + player history
+VERSION OPTIMISÉE: 3 endpoints séparés + 5 props + TEST R²
 """
 
 import os
@@ -89,15 +89,16 @@ def analyze_with_xgboost(player, opponent, is_home, stat_type, line):
         'max': int(df[stat_col].max())
     }
     
-    # 5. R² du modèle
+    # ✅ 5. R² du modèle (TEST R², pas train!)
     model_key = f"{player}_{stat_type}"
     if model_key in model_manager.models:
         model_stats = model_manager.models[model_key].training_stats
-        r_squared = model_stats['train_metrics']['r2']
-        rmse = model_stats['train_metrics']['rmse']
+        # ✅ FIX: Utilise TEST metrics (vraie performance!)
+        r_squared = model_stats.get('test_metrics', {}).get('r2', 0.5)
+        rmse = model_stats.get('test_metrics', {}).get('rmse', 5.0)
     else:
-        r_squared = 0.87
-        rmse = 2.8
+        r_squared = 0.50
+        rmse = 5.0
     
     return {
         'status': 'SUCCESS',
@@ -168,23 +169,23 @@ def analyze_betting_line(prediction, confidence_interval, line):
 
 @app.route('/api/daily-opportunities-points', methods=['GET'])
 def daily_opportunities_points():
-    """Scan 15 opportunités POINTS aléatoires"""
-    return scan_opportunities_by_type('points', limit=15)
+    """Scan 5 opportunités POINTS aléatoires"""
+    return scan_opportunities_by_type('points', limit=5)
 
 
 @app.route('/api/daily-opportunities-assists', methods=['GET'])
 def daily_opportunities_assists():
-    """Scan 15 opportunités ASSISTS aléatoires"""
-    return scan_opportunities_by_type('assists', limit=15)
+    """Scan 5 opportunités ASSISTS aléatoires"""
+    return scan_opportunities_by_type('assists', limit=5)
 
 
 @app.route('/api/daily-opportunities-rebounds', methods=['GET'])
 def daily_opportunities_rebounds():
-    """Scan 15 opportunités REBOUNDS aléatoires"""
-    return scan_opportunities_by_type('rebounds', limit=15)
+    """Scan 5 opportunités REBOUNDS aléatoires"""
+    return scan_opportunities_by_type('rebounds', limit=5)
 
 
-def scan_opportunities_by_type(stat_type, limit=15):
+def scan_opportunities_by_type(stat_type, limit=5):
     """
     Scan opportunités pour UN type de stat avec randomisation
     FIX: Utilise 'stat_type' au lieu de 'market'
