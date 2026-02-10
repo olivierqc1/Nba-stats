@@ -115,7 +115,18 @@
             font-size: 1.2em;
         }
         .opp-header { margin-bottom: 20px; }
-        .opp-player { font-size: 1.8em; font-weight: 800; color: #333; margin-bottom: 5px; }
+        .opp-player { 
+            font-size: 1.8em; 
+            font-weight: 800; 
+            color: #667eea; 
+            margin-bottom: 5px;
+            cursor: pointer;
+            text-decoration: underline;
+            transition: color 0.3s;
+        }
+        .opp-player:hover {
+            color: #764ba2;
+        }
         .opp-matchup { color: #666; font-size: 1.1em; margin-bottom: 10px; }
         .opp-badge {
             display: inline-block;
@@ -242,6 +253,125 @@
             color: #1e3a8a;
             font-weight: 700;
         }
+        
+        /* MODAL STYLES */
+        .modal {
+            display: none;
+            position: fixed;
+            z-index: 1000;
+            left: 0;
+            top: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.7);
+            animation: fadeIn 0.3s;
+        }
+        .modal.open {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .modal-content {
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            max-width: 800px;
+            width: 90%;
+            max-height: 90vh;
+            overflow-y: auto;
+            animation: slideIn 0.3s;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        @keyframes slideIn {
+            from { transform: translateY(-50px); opacity: 0; }
+            to { transform: translateY(0); opacity: 1; }
+        }
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 3px solid #667eea;
+        }
+        .modal-title {
+            font-size: 1.8em;
+            font-weight: 800;
+            color: #333;
+        }
+        .modal-close {
+            font-size: 2em;
+            cursor: pointer;
+            color: #999;
+            transition: color 0.3s;
+        }
+        .modal-close:hover {
+            color: #ef4444;
+        }
+        .stats-summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-bottom: 25px;
+        }
+        .stat-card {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 10px;
+            text-align: center;
+        }
+        .stat-card-label {
+            font-size: 0.85em;
+            color: #666;
+            margin-bottom: 5px;
+        }
+        .stat-card-value {
+            font-size: 1.8em;
+            font-weight: 800;
+            color: #667eea;
+        }
+        .trend-box {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+        .trend-box strong {
+            font-size: 1.1em;
+        }
+        .games-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        .games-table th {
+            background: #667eea;
+            color: white;
+            padding: 12px;
+            text-align: left;
+            font-size: 0.9em;
+        }
+        .games-table td {
+            padding: 12px;
+            border-bottom: 1px solid #e0e0e0;
+            font-size: 0.95em;
+        }
+        .games-table tr:hover {
+            background: #f8f9fa;
+        }
+        .result-w {
+            color: #10b981;
+            font-weight: 700;
+        }
+        .result-l {
+            color: #ef4444;
+            font-weight: 700;
+        }
+        
         .loading {
             text-align: center;
             padding: 60px;
@@ -287,8 +417,8 @@
         </div>
 
         <div class="info-banner">
-            <strong>🎲 Scan Aléatoire + Détails Techniques</strong><br>
-            Analyse 25 props aléatoires. Clique sur "Détails" pour voir l'intervalle de confiance et les probabilités.
+            <strong>🎲 Scan Aléatoire + Historique</strong><br>
+            Clique sur le nom d'un joueur pour voir ses 10 derniers matchs et tendances.
         </div>
 
         <div class="filters">
@@ -352,6 +482,18 @@
         <div id="errorDiv" class="error hidden"></div>
     </div>
 
+    <!-- MODAL POPUP -->
+    <div id="playerModal" class="modal">
+        <div class="modal-content">
+            <div class="modal-header">
+                <div class="modal-title" id="modalPlayerName">-</div>
+                <div class="modal-close" onclick="closePlayerModal()">&times;</div>
+            </div>
+            <div id="modalContent">
+                <div class="spinner"></div>
+            </div>
+        </div>
+    </div>
 <script>
         const API_URL = 'https://nba-stats-xcyv.onrender.com';
 
@@ -433,6 +575,141 @@
             });
         }
 
+        // ============================================================================
+        // PLAYER MODAL FUNCTIONS
+        // ============================================================================
+
+        async function openPlayerModal(playerName) {
+            const modal = document.getElementById('playerModal');
+            const modalContent = document.getElementById('modalContent');
+            const modalPlayerName = document.getElementById('modalPlayerName');
+            
+            modalPlayerName.textContent = `📊 ${playerName}`;
+            modal.classList.add('open');
+            
+            // Loading state
+            modalContent.innerHTML = '<div class="spinner" style="margin: 40px auto;"></div><p style="text-align: center;">Chargement des données...</p>';
+            
+            try {
+                const response = await fetch(`${API_URL}/api/player-history/${encodeURIComponent(playerName)}`);
+                
+                if (!response.ok) {
+                    throw new Error('Impossible de récupérer les données');
+                }
+                
+                const data = await response.json();
+                
+                if (data.status === 'SUCCESS') {
+                    displayPlayerHistory(data);
+                } else {
+                    modalContent.innerHTML = `<div class="error">❌ ${data.message}</div>`;
+                }
+            } catch (error) {
+                console.error('Player history error:', error);
+                modalContent.innerHTML = `<div class="error">❌ Erreur: ${error.message}</div>`;
+            }
+        }
+
+        function closePlayerModal() {
+            const modal = document.getElementById('playerModal');
+            modal.classList.remove('open');
+        }
+
+        function displayPlayerHistory(data) {
+            const modalContent = document.getElementById('modalContent');
+            
+            const stats = data.stats;
+            const trends = data.trends;
+            const games = data.games;
+            
+            // Détermine la tendance
+            const trendIcon = trends.points_trend > 0 ? '📈' : trends.points_trend < 0 ? '📉' : '➡️';
+            const trendColor = trends.points_trend > 0 ? '#10b981' : trends.points_trend < 0 ? '#ef4444' : '#6b7280';
+            
+            const html = `
+                <div class="stats-summary">
+                    <div class="stat-card">
+                        <div class="stat-card-label">Moyenne PTS</div>
+                        <div class="stat-card-value">${stats.avg_points}</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-card-label">Moyenne AST</div>
+                        <div class="stat-card-value">${stats.avg_assists}</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-card-label">Moyenne REB</div>
+                        <div class="stat-card-value">${stats.avg_rebounds}</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-card-label">Minutes/match</div>
+                        <div class="stat-card-value">${stats.avg_minutes}</div>
+                    </div>
+                </div>
+                
+                <div class="trend-box">
+                    <div style="margin-bottom: 10px;">
+                        <strong>${trendIcon} Tendance Points:</strong> 
+                        <span style="font-size: 1.2em; color: ${trendColor};">
+                            ${trends.points_trend > 0 ? '+' : ''}${trends.points_trend} pts
+                        </span> (5 derniers matchs)
+                    </div>
+                    <div style="margin-bottom: 10px;">
+                        <strong>🔥 Form Récente:</strong> ${trends.form}
+                    </div>
+                    <div style="margin-bottom: 10px;">
+                        <strong>⏱️ Minutes:</strong> ${trends.minutes_avg} min/match
+                        ${trends.minutes_stable ? '(stable ✅)' : '(variable ⚠️)'}
+                    </div>
+                    <div>
+                        <strong>📅 Matchs analysés:</strong> ${stats.games_played} matchs
+                    </div>
+                </div>
+                
+                <h3 style="margin-bottom: 15px; color: #333;">📋 10 derniers matchs</h3>
+                
+                <table class="games-table">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Adversaire</th>
+                            <th>PTS</th>
+                            <th>AST</th>
+                            <th>REB</th>
+                            <th>MIN</th>
+                            <th>W/L</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${games.map(game => `
+                            <tr>
+                                <td>${game.date}</td>
+                                <td>${game.is_home ? '🏠 vs' : '✈️ @'} ${game.opponent}</td>
+                                <td><strong>${game.points}</strong></td>
+                                <td>${game.assists}</td>
+                                <td>${game.rebounds}</td>
+                                <td>${game.minutes}</td>
+                                <td class="result-${game.result.toLowerCase()}">${game.result}</td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+            
+            modalContent.innerHTML = html;
+        }
+
+        // Close modal when clicking outside
+        window.onclick = function(event) {
+            const modal = document.getElementById('playerModal');
+            if (event.target === modal) {
+                closePlayerModal();
+            }
+        }
+
+        // ============================================================================
+        // HELPER FUNCTIONS
+        // ============================================================================
+
         function getTeamName(abbr) {
             const teams = {
                 'ATL': 'Atlanta Hawks', 'BOS': 'Boston Celtics', 'BKN': 'Brooklyn Nets',
@@ -500,7 +777,7 @@
             return `
                 <div class="opp-card ${recClass}" data-rank="${rank}">
                     <div class="opp-header">
-                        <div class="opp-player">${opp.player}</div>
+                        <div class="opp-player" onclick="openPlayerModal('${opp.player}')">${opp.player}</div>
                         <div class="opp-matchup">
                             ${opp.is_home ? '🏠 vs' : '✈️ @'} ${teamName} • ${statLabel}
                         </div>
