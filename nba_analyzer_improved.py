@@ -168,23 +168,23 @@ def analyze_betting_line(prediction, confidence_interval, line):
 
 @app.route('/api/daily-opportunities-points', methods=['GET'])
 def daily_opportunities_points():
-    """Scan 25 opportunités POINTS aléatoires"""
-    return scan_opportunities_by_type('points', limit=25)
+    """Scan 15 opportunités POINTS aléatoires"""
+    return scan_opportunities_by_type('points', limit=15)
 
 
 @app.route('/api/daily-opportunities-assists', methods=['GET'])
 def daily_opportunities_assists():
-    """Scan 25 opportunités ASSISTS aléatoires"""
-    return scan_opportunities_by_type('assists', limit=25)
+    """Scan 15 opportunités ASSISTS aléatoires"""
+    return scan_opportunities_by_type('assists', limit=15)
 
 
 @app.route('/api/daily-opportunities-rebounds', methods=['GET'])
 def daily_opportunities_rebounds():
-    """Scan 25 opportunités REBOUNDS aléatoires"""
-    return scan_opportunities_by_type('rebounds', limit=25)
+    """Scan 15 opportunités REBOUNDS aléatoires"""
+    return scan_opportunities_by_type('rebounds', limit=15)
 
 
-def scan_opportunities_by_type(stat_type, limit=25):
+def scan_opportunities_by_type(stat_type, limit=15):
     """
     Scan opportunités pour UN type de stat avec randomisation
     FIX: Utilise 'stat_type' au lieu de 'market'
@@ -321,6 +321,7 @@ def scan_opportunities_by_type(stat_type, limit=25):
             'status': 'ERROR',
             'message': str(e)
         }), 500
+
 # ============================================================================
 # PLAYER HISTORY ENDPOINT
 # ============================================================================
@@ -433,22 +434,16 @@ def debug_odds():
         })
     
     try:
-        # Test direct de l'API
         print("🔍 Testing Odds API...")
         
-        # Appelle l'API
         raw_props = odds_client.get_player_props(days=1)
-        
-        # Analyse les résultats
         total_props = len(raw_props)
         
-        # Compte par stat_type (FIX)
         stat_types = {}
         for prop in raw_props:
             st = prop.get('stat_type', 'unknown')
             stat_types[st] = stat_types.get(st, 0) + 1
         
-        # Sample de props
         sample_props = raw_props[:3] if raw_props else []
         
         return jsonify({
