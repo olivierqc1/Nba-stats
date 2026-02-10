@@ -417,7 +417,7 @@
         </div>
 
         <div class="info-banner">
-            <strong>🎲 Scan Aléatoire + Historique</strong><br>
+            <strong>🎲 Scan 15 props + Historique</strong><br>
             Clique sur le nom d'un joueur pour voir ses 10 derniers matchs et tendances.
         </div>
 
@@ -441,13 +441,13 @@
             
             <div class="button-group">
                 <button class="btn-scan btn-points" onclick="scanOpportunities('points')">
-                    🏀 Scanner POINTS (25 random)
+                    🏀 Scanner POINTS (15 props)
                 </button>
                 <button class="btn-scan btn-assists" onclick="scanOpportunities('assists')">
-                    🎯 Scanner ASSISTS (25 random)
+                    🎯 Scanner ASSISTS (15 props)
                 </button>
                 <button class="btn-scan btn-rebounds" onclick="scanOpportunities('rebounds')">
-                    💪 Scanner REBOUNDS (25 random)
+                    💪 Scanner REBOUNDS (15 props)
                 </button>
             </div>
         </div>
@@ -474,7 +474,7 @@
         <div id="loadingDiv" class="loading hidden">
             <div class="spinner"></div>
             <h3>Scan en cours...</h3>
-            <p>Analyse de 25 props aléatoires (30-90 sec)</p>
+            <p>Analyse de 15 props aléatoires (20-60 sec)</p>
         </div>
 
         <div id="resultsDiv" class="opportunities-grid hidden"></div>
@@ -494,6 +494,7 @@
             </div>
         </div>
     </div>
+
 <script>
         const API_URL = 'https://nba-stats-xcyv.onrender.com';
 
@@ -514,11 +515,17 @@
                 'rebounds': 'daily-opportunities-rebounds'
             };
 
+            // Timeout de 3 minutes avec AbortController
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 180000);
+
             try {
                 const response = await fetch(
                     `${API_URL}/api/${endpoints[statType]}?min_edge=${minEdge}&min_r2=${minR2}`,
-                    { timeout: 120000 }
+                    { signal: controller.signal }
                 );
+
+                clearTimeout(timeoutId);
 
                 if (!response.ok) {
                     throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -532,8 +539,14 @@
                     displayError(data.message || 'Erreur inconnue');
                 }
             } catch (error) {
+                clearTimeout(timeoutId);
                 console.error('Scan error:', error);
-                displayError(`Erreur: ${error.message}`);
+                
+                if (error.name === 'AbortError') {
+                    displayError('⏱️ Timeout: Le scan a pris trop de temps (>3 min). Le backend Render Free limite à 30s. Upgrade à Render Starter ($7/mois) pour des scans plus longs.');
+                } else {
+                    displayError(`❌ Erreur: ${error.message}`);
+                }
             } finally {
                 document.getElementById('loadingDiv').classList.add('hidden');
                 document.querySelectorAll('.btn-scan').forEach(btn => btn.disabled = false);
@@ -555,7 +568,7 @@
             }
 
             if (opportunities.length === 0) {
-                displayError('Aucun pari trouvé avec ces filtres. Essaie de baisser R² ou Edge.');
+                displayError('Aucun pari trouvé avec ces filtres. Essaie de baisser R² à 0.70 ou Edge à 3%.');
                 return;
             }
             
@@ -587,7 +600,6 @@
             modalPlayerName.textContent = `📊 ${playerName}`;
             modal.classList.add('open');
             
-            // Loading state
             modalContent.innerHTML = '<div class="spinner" style="margin: 40px auto;"></div><p style="text-align: center;">Chargement des données...</p>';
             
             try {
@@ -622,7 +634,6 @@
             const trends = data.trends;
             const games = data.games;
             
-            // Détermine la tendance
             const trendIcon = trends.points_trend > 0 ? '📈' : trends.points_trend < 0 ? '📉' : '➡️';
             const trendColor = trends.points_trend > 0 ? '#10b981' : trends.points_trend < 0 ? '#ef4444' : '#6b7280';
             
@@ -698,7 +709,6 @@
             modalContent.innerHTML = html;
         }
 
-        // Close modal when clicking outside
         window.onclick = function(event) {
             const modal = document.getElementById('playerModal');
             if (event.target === modal) {
@@ -883,7 +893,7 @@
 
         function displayError(message) {
             const errorDiv = document.getElementById('errorDiv');
-            errorDiv.textContent = `❌ ${message}`;
+            errorDiv.textContent = message;
             errorDiv.classList.remove('hidden');
         }
     </script>
