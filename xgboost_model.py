@@ -1,321 +1,308 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-XGBoost NBA Model - VERSION FINALE
-Skip predictability check pour POINTS (accepte tout)
-Garde check pour ASSISTS/REBOUNDS
+SIMPLE XGBOOST MODEL
+Utilise SEULEMENT 5-8 features pour maximiser la stabilité
 """
 
-import pandas as pd
 import numpy as np
-from sklearn.model_selection import train_test_split, cross_val_score
-from sklearn.preprocessing import StandardScaler
+import pandas as pd
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_error
 import xgboost as xgb
-from scipy import stats as scipy_stats
-import warnings
-warnings.filterwarnings('ignore')
 
-
-class XGBoostNBAModel:
-    """Modèle XGBoost pour prédire stats NBA"""
+class SimpleXGBoostModel:
+    """Modèle SIMPLE - Features minimales pour stabilité maximale"""
     
     def __init__(self, stat_type='points'):
+        """
+        Args:
+            stat_type: 'points', 'assists', ou 'rebounds'
+        """
         self.stat_type = stat_type
         self.model = None
-        self.scaler = StandardScaler()
-        self.training_stats = {}
+        self.feature_columns = None
+        self.target_column = None
         
-        # Hyperparamètres
-        self.params = {
+        # Map stat_type to column name
+        stat_map = {
+            'points': 'PTS',
+            'assists': 'AST',
+            'rebounds': 'REB'
+        }
+        self.target_column = stat_map.get(stat_type, 'PTS')
+        
+    def prepare_features(self, df):
+        """
+        Sélectionne SEULEMENT les features essentielles
+        
+        Features utilisées (5-8 max):
+        1. avg_X_last_5 (moyenne 5 derniers matchs)
+        2. avg_X_last_10 (moyenne 10 derniers matchs)
+        3. home (domicile=1, extérieur=0)
+        4. rest_days (jours de repos)
+        5. minutes_avg (minutes moyennes)
+        
+        Optionnel selon disponibilité:
+        6. MIN (minutes ce match - si dispo en prédiction)
+        """
+        feature_cols = []
+        
+        # Feature 1: Moyenne 5 derniers matchs (ESSENTIELLE)
+        col_5 = f'avg_{self.target_column.lower()}_last_5'
+        if col_5 in df.columns:
+            feature_cols.append(col_5)
+        
+        # Feature 2: Moyenne 10 derniers matchs (ESSENTIELLE)
+        col_10 = f'avg_{self.target_column.lower()}_last_10'
+        if col_10 in df.columns:
+            feature_cols.append(col_10)
+        
+        # Feature 3: Home/Away
+        if 'home' in df.columns:
+            feature_cols.append('home')
+        
+        # Feature 4: Rest days
+        if 'rest_days' in df.columns:
+            feature_cols.append('rest_days')
+        
+        # Feature 5: Minutes moyennes
+        if 'minutes_avg' in df.columns:
+            feature_cols.append('minutes_avg')
+        
+        # Feature 6 (optionnel): Minutes ce match
+        if 'MIN' in df.columns:
+            feature_cols.append('MIN')
+        
+        self.feature_columns = feature_cols
+        
+        print(f"\n📊 Features utilisées ({len(feature_cols)}):")
+        for i, col in enumerate(feature_cols, 1):
+            print(f"   {i}. {col}")
+        
+        return df[feature_cols].copy()
+    
+    def train(self, df, test_size=0.2, random_state=42):
+        """
+        Entraîne le modèle XGBoost
+        
+        Args:
+            df: DataFrame avec features + target
+            test_size: Proportion du test set
+            random_state: Seed pour reproductibilité
+        
+        Returns:
+            dict avec métriques (R², MAE, RMSE)
+        """
+        
+        # Vérification données minimales
+        if df is None or len(df) < 10:
+            print(f"❌ Insufficient data: {len(df) if df is not None else 0} games")
+            return None
+        
+        # Target
+        if self.target_column not in df.columns:
+            print(f"❌ Target column '{self.target_column}' not found")
+            return None
+        
+        y = df[self.target_column].copy()
+        
+        # Features
+        X = self.prepare_features(df)
+        
+        if len(X.columns) < 2:
+            print(f"❌ Insufficient features: {len(X.columns)}")
+            return None
+        
+        # Remove NaN
+        mask = ~(X.isna().any(axis=1) | y.isna())
+        X = X[mask]
+        y = y[mask]
+        
+        print(f"\n🎯 Training data: {len(X)} games")
+        print(f"   Target: {self.target_column} (mean={y.mean():.1f}, std={y.std():.1f})")
+        
+        if len(X) < 10:
+            print(f"❌ After cleanup: only {len(X)} games remaining")
+            return None
+        
+        # Train/Test split
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, y, test_size=test_size, random_state=random_state, shuffle=False
+        )
+        
+        print(f"   Train: {len(X_train)} | Test: {len(X_test)}")
+        
+        # XGBoost params - SIMPLES pour éviter overfitting
+        params = {
             'objective': 'reg:squarederror',
-            'max_depth': 4,
-            'learning_rate': 0.08,
-            'n_estimators': 120,
-            'min_child_weight': 4,
-            'subsample': 0.75,
-            'colsample_bytree': 0.75,
-            'reg_alpha': 1.5,
-            'reg_lambda': 1.5,
-            'random_state': 42
+            'max_depth': 3,  # Shallow trees
+            'learning_rate': 0.1,
+            'n_estimators': 50,  # Peu d'arbres
+            'subsample': 0.8,
+            'colsample_bytree': 0.8,
+            'random_state': random_state,
+            'verbosity': 0
         }
-    
-    def remove_outliers(self, df, column):
-        """Enlève les données aberrantes"""
-        Q1 = df[column].quantile(0.25)
-        Q3 = df[column].quantile(0.75)
-        IQR = Q3 - Q1
-        lower = Q1 - 2.0 * IQR
-        upper = Q3 + 2.0 * IQR
-        mask = (df[column] >= lower) & (df[column] <= upper)
         
-        removed = len(df) - mask.sum()
-        print(f"   🗑️  Outliers removed: {removed}")
+        # Train
+        print(f"\n🤖 Training XGBoost (max_depth=3, n_est=50)...")
+        self.model = xgb.XGBRegressor(**params)
+        self.model.fit(X_train, y_train)
         
-        return df[mask].copy()
-    
-    def calculate_predictability_score(self, df, stat_col):
-        """Calcule score de prévisibilité (pour info uniquement)"""
-        mean = df[stat_col].mean()
-        std = df[stat_col].std()
-        cv = (std / mean) * 100 if mean > 0 else 100
+        # Predictions
+        y_pred_train = self.model.predict(X_train)
+        y_pred_test = self.model.predict(X_test)
         
-        diffs = df[stat_col].diff().dropna()
-        stability = diffs.std() if len(diffs) > 0 else 10
+        # Metrics
+        r2_train = r2_score(y_train, y_pred_train)
+        r2_test = r2_score(y_test, y_pred_test)
+        mae_test = mean_absolute_error(y_test, y_pred_test)
+        rmse_test = np.sqrt(mean_squared_error(y_test, y_pred_test))
         
-        try:
-            from sklearn.linear_model import LinearRegression
-            X = np.arange(len(df)).reshape(-1, 1)
-            y = df[stat_col].values
-            lr = LinearRegression().fit(X, y)
-            trend_r2 = lr.score(X, y)
-        except:
-            trend_r2 = 0
+        print(f"\n📈 RÉSULTATS:")
+        print(f"   R² Train: {r2_train:.3f}")
+        print(f"   R² Test:  {r2_test:.3f}")
+        print(f"   MAE Test: {mae_test:.2f}")
+        print(f"   RMSE Test: {rmse_test:.2f}")
         
-        cv_score = max(0, 100 - cv)
-        stability_score = max(0, 100 - stability * 6)
-        trend_score = trend_r2 * 100
+        # Feature importance
+        importance = self.model.feature_importances_
+        print(f"\n🎯 Feature Importance:")
+        for feat, imp in sorted(zip(self.feature_columns, importance), key=lambda x: x[1], reverse=True):
+            print(f"   {feat}: {imp:.3f}")
         
-        total_score = (cv_score * 0.5 + stability_score * 0.3 + trend_score * 0.2)
-        
-        return {
-            'score': round(total_score, 1),
-            'cv': round(cv, 1),
-            'stability': round(stability, 2),
-            'trend_r2': round(trend_r2, 3)
+        results = {
+            'r2_train': r2_train,
+            'r2_test': r2_test,
+            'mae': mae_test,
+            'rmse': rmse_test,
+            'train_size': len(X_train),
+            'test_size': len(X_test),
+            'features_used': len(self.feature_columns),
+            'feature_names': self.feature_columns,
+            'feature_importance': dict(zip(self.feature_columns, importance))
         }
+        
+        return results
     
-    def train(self, player, season='2024-25', save_model=True):
-        """Entraîne le modèle"""
+    def predict(self, df_new):
+        """
+        Prédit sur nouvelles données
         
-        print(f"\n{'='*70}")
-        print(f"🎯 TRAINING: {player} - {self.stat_type.upper()}")
-        print(f"{'='*70}")
+        Args:
+            df_new: DataFrame avec mêmes features que training
         
-        try:
-            from advanced_data_collector import AdvancedDataCollector
-            collector = AdvancedDataCollector()
-            
-            # Récupère données
-            df = collector.get_complete_player_data(player)
-            
-            if df is None:
-                return {'status': 'ERROR', 'message': 'No data'}
-            
-            # Fix dict
-            if isinstance(df, dict):
-                df = pd.DataFrame([df])
-            
-            if len(df) < 10:
-                return {'status': 'ERROR', 'message': f'Only {len(df)} games'}
-            
-            stat_col = {'points': 'PTS', 'assists': 'AST', 'rebounds': 'REB'}[self.stat_type]
-            
-            print(f"📊 Total games: {len(df)}")
-            
-            # Enlève outliers
-            df_clean = self.remove_outliers(df, stat_col)
-            print(f"   ✅ Clean games: {len(df_clean)}")
-            
-            if len(df_clean) < 10:
-                return {'status': 'ERROR', 'message': 'Too many outliers'}
-            
-            # Calcule predictability (pour info)
-            pred_score = self.calculate_predictability_score(df_clean, stat_col)
-            print(f"\n📈 Predictability: {pred_score['score']}/100 (CV={pred_score['cv']}%)")
-            
-            # ✅ SOLUTION: Skip check pour POINTS uniquement!
-            if self.stat_type in ['assists', 'rebounds']:
-                # Garde le check strict pour ASSISTS/REBOUNDS
-                if pred_score['score'] < 25:
-                    print(f"\n⚠️  SKIPPED: Too unpredictable for {self.stat_type}")
-                    return {
-                        'status': 'SKIPPED',
-                        'message': f'Player too unpredictable for {self.stat_type}',
-                        'predictability_score': pred_score['score']
-                    }
-            else:
-                # POINTS: Accepte TOUT le monde!
-                print(f"   ✅ POINTS: Predictability check SKIPPED (always accept)")
-            
-            # Features
-            features_df = collector.prepare_features_for_prediction(player, '', True)
-            
-            if features_df is None:
-                return {'status': 'ERROR', 'message': 'No features'}
-            
-            # Fix dict
-            if isinstance(features_df, dict):
-                features_df = pd.DataFrame([features_df])
-            
-            # Ajoute CV
-            features_df['cv'] = pred_score['cv']
-            features_df['stability'] = pred_score['stability']
-            
-            # Merge
-            df_clean = df_clean.sort_values('GAME_DATE', ascending=False).reset_index(drop=True)
-            df_clean['target'] = df_clean[stat_col]
-            
-            # Aligne
-            min_len = min(len(features_df), len(df_clean))
-            if min_len < 10:
-                return {'status': 'ERROR', 'message': 'Insufficient aligned data'}
-            
-            features_df = features_df.iloc[:min_len]
-            df_clean = df_clean.iloc[:min_len]
-            
-            X = features_df
-            y = df_clean['target'].values
-            
-            print(f"\n🔢 Features: {X.shape}")
-            
-            # Train/test split
-            X_train, X_test, y_train, y_test = train_test_split(
-                X, y, test_size=0.3, random_state=42, shuffle=False
-            )
-            
-            print(f"   Train={len(X_train)}, Test={len(X_test)}")
-            
-            # Scale
-            X_train_scaled = self.scaler.fit_transform(X_train)
-            X_test_scaled = self.scaler.transform(X_test)
-            
-            # Train
-            self.model = xgb.XGBRegressor(**self.params)
-            self.model.fit(
-                X_train_scaled, y_train,
-                eval_set=[(X_test_scaled, y_test)],
-                early_stopping_rounds=15,
-                verbose=False
-            )
-            
-            # Metrics
-            from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_error
-            
-            y_train_pred = self.model.predict(X_train_scaled)
-            train_r2 = r2_score(y_train, y_train_pred)
-            
-            y_test_pred = self.model.predict(X_test_scaled)
-            test_r2 = r2_score(y_test, y_test_pred)
-            test_rmse = np.sqrt(mean_squared_error(y_test, y_test_pred))
-            
-            try:
-                cv_scores = cross_val_score(
-                    self.model, X_train_scaled, y_train,
-                    cv=min(3, len(X_train) // 10), scoring='r2'
-                )
-            except:
-                cv_scores = np.array([test_r2])
-            
-            print(f"\n📊 RESULTS:")
-            print(f"   Train R²: {train_r2:.3f}")
-            print(f"   Test R²:  {test_r2:.3f} ⭐")
-            print(f"   RMSE: {test_rmse:.2f}")
-            
-            # ✅ Seuil R² plus permissif
-            min_r2 = 0.05 if self.stat_type == 'points' else 0.10
-            
-            if test_r2 < min_r2:
-                print(f"\n❌ REJECTED: R² {test_r2:.3f} < {min_r2}")
-                return {
-                    'status': 'REJECTED',
-                    'message': f'R² too low',
-                    'test_r2': round(test_r2, 3),
-                    'predictability_score': pred_score['score']
-                }
-            
-            # Store stats
-            self.training_stats = {
-                'player': player,
-                'stat_type': self.stat_type,
-                'train_metrics': {'r2': train_r2, 'rmse': 0},
-                'test_metrics': {'r2': test_r2, 'rmse': test_rmse, 'mae': 0},
-                'cv_results': {'r2_mean': cv_scores.mean(), 'r2_std': cv_scores.std()},
-                'predictability': pred_score,
-                'data': {
-                    'total_games': len(df),
-                    'clean_games': len(df_clean),
-                    'outliers_removed': len(df) - len(df_clean)
-                },
-                'stability': {'overfitting': train_r2 - test_r2, 'cv_percent': 0}
-            }
-            
-            print(f"\n✅ SUCCESS!")
-            print(f"{'='*70}\n")
-            
-            return {
-                'status': 'SUCCESS',
-                'train_metrics': self.training_stats['train_metrics'],
-                'test_metrics': self.training_stats['test_metrics'],
-                'cv_results': self.training_stats['cv_results'],
-                'predictability': pred_score,
-                'stability': self.training_stats['stability']
-            }
-        
-        except Exception as e:
-            print(f"\n❌ EXCEPTION: {str(e)}")
-            import traceback
-            traceback.print_exc()
-            return {'status': 'ERROR', 'message': str(e)}
-    
-    def predict(self, features):
-        """Fait une prédiction"""
+        Returns:
+            float: Prédiction
+        """
         if self.model is None:
-            raise ValueError("Model not trained")
+            raise ValueError("Model not trained yet!")
         
-        if isinstance(features, dict):
-            features = pd.DataFrame([features])
-        elif isinstance(features, np.ndarray):
-            if len(features.shape) == 1:
-                features = features.reshape(1, -1)
+        if self.feature_columns is None:
+            raise ValueError("Features not defined!")
         
-        features_scaled = self.scaler.transform(features)
-        prediction = self.model.predict(features_scaled)[0]
+        # Prepare features
+        X_new = df_new[self.feature_columns].copy()
         
-        test_rmse = self.training_stats['test_metrics']['rmse']
-        ci_lower = prediction - 1.96 * test_rmse
-        ci_upper = prediction + 1.96 * test_rmse
+        # Check NaN
+        if X_new.isna().any().any():
+            print(f"⚠️  NaN in features - filling with mean")
+            X_new = X_new.fillna(X_new.mean())
+        
+        # Predict
+        prediction = self.model.predict(X_new)[0]
+        
+        return prediction
+    
+    def analyze_opportunity(self, df, bookmaker_line):
+        """
+        Analyse si une opportunité existe
+        
+        Args:
+            df: DataFrame avec historique du joueur
+            bookmaker_line: Ligne du bookmaker (float)
+        
+        Returns:
+            dict avec status, prediction, edge, etc.
+        """
+        
+        # 1. Train model
+        print(f"\n{'='*60}")
+        print(f"🎲 ANALYSE: {self.stat_type.upper()}")
+        print(f"   Bookmaker line: {bookmaker_line}")
+        
+        metrics = self.train(df)
+        
+        if metrics is None:
+            return {
+                'status': 'ERROR',
+                'message': 'Insufficient aligned data',
+                'player': 'Unknown',
+                'stat': self.stat_type
+            }
+        
+        # 2. Check R² test
+        r2_test = metrics['r2_test']
+        
+        print(f"\n📊 Model Quality:")
+        print(f"   R² Test: {r2_test:.3f}")
+        
+        # Seuil PERMISSIF: R² >= 0.20
+        if r2_test < 0.20:
+            print(f"   ❌ REJECTED: R² too low (< 0.20)")
+            return {
+                'status': 'REJECTED',
+                'reason': 'Low R²',
+                'r2_test': r2_test,
+                'message': f'R² test = {r2_test:.3f} < 0.20'
+            }
+        
+        # 3. Predict sur dernier match (row 0 = plus récent)
+        last_game = df.iloc[[0]]
+        prediction = self.predict(last_game)
+        
+        print(f"\n🎯 Prediction:")
+        print(f"   Model: {prediction:.1f}")
+        print(f"   Line: {bookmaker_line:.1f}")
+        print(f"   Diff: {prediction - bookmaker_line:+.1f}")
+        
+        # 4. Calculate edge
+        edge = abs(prediction - bookmaker_line) / bookmaker_line * 100
+        
+        # 5. Recommendation
+        if abs(prediction - bookmaker_line) < 0.5:
+            recommendation = 'SKIP'
+            reason = 'Too close to line'
+        elif prediction > bookmaker_line:
+            recommendation = 'OVER'
+            reason = f'+{prediction - bookmaker_line:.1f} edge'
+        else:
+            recommendation = 'UNDER'
+            reason = f'{prediction - bookmaker_line:.1f} edge'
+        
+        print(f"\n💡 Recommendation: {recommendation}")
+        print(f"   Reason: {reason}")
+        print(f"   Edge: {edge:.1f}%")
         
         return {
+            'status': 'SUCCESS',
             'prediction': float(prediction),
-            'confidence_interval': {
-                'lower': float(ci_lower),
-                'upper': float(ci_upper)
-            }
+            'bookmaker_line': float(bookmaker_line),
+            'edge': float(edge),
+            'recommendation': recommendation,
+            'reason': reason,
+            'r2_test': float(r2_test),
+            'mae': float(metrics['mae']),
+            'rmse': float(metrics['rmse']),
+            'games_analyzed': metrics['train_size'] + metrics['test_size'],
+            'features_used': metrics['features_used']
         }
 
 
-class ModelManager:
-    """Gère les modèles"""
-    
-    def __init__(self):
-        self.models = {}
-    
-    def predict(self, player, stat_type, opponent, is_home):
-        model_key = f"{player}_{stat_type}"
-        
-        if model_key not in self.models:
-            print(f"🔄 Training: {model_key}")
-            model = XGBoostNBAModel(stat_type=stat_type)
-            result = model.train(player, save_model=False)
-            
-            if result['status'] != 'SUCCESS':
-                raise ValueError(f"Training failed: {result.get('message')}")
-            
-            self.models[model_key] = model
-        
-        from advanced_data_collector import AdvancedDataCollector
-        collector = AdvancedDataCollector()
-        features = collector.prepare_features_for_prediction(player, opponent, is_home)
-        
-        if features is None:
-            raise ValueError("No features")
-        
-        return self.models[model_key].predict(features)
-
-
-if __name__ == '__main__':
-    model = XGBoostNBAModel(stat_type='points')
-    result = model.train('LeBron James', '2024-25', save_model=False)
-    print(f"\nStatus: {result['status']}")
-    if result['status'] == 'SUCCESS':
-        print(f"Test R²: {result['test_metrics']['r2']:.3f}")
+# Test
+if __name__ == "__main__":
+    print("Simple XGBoost Model - Ready")
+    print("Features: avg_last_5, avg_last_10, home, rest_days, minutes_avg")
+    print("Target R² test: >= 0.20")
+    print("Max features: 5-8")
