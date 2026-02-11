@@ -348,4 +348,4 @@ if __name__ == '__main__':
     if result['status'] == 'SUCCESS':
         print(f"Test R²: {result['test_metrics']['r2']:.3f}")
         print(f"Predictability: {result['predictability']['score']}/100")
-    print("="*70)
+    print("="*70) 
