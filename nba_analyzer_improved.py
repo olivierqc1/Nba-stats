@@ -496,6 +496,33 @@ def get_odds_usage():
 # ============================================================================
 # MAIN
 # ============================================================================
+@app.route('/api/test-model-quality', methods=['GET'])
+def test_model_quality():
+    """Teste R² sur joueurs stars"""
+    
+    if not XGBOOST_AVAILABLE:
+        return jsonify({'error': 'XGBoost not available'}), 503
+    
+    test_players = ['LeBron James', 'Stephen Curry', 'Giannis Antetokounmpo']
+    results = []
+    
+    for player in test_players:
+        for stat_type in ['points', 'assists', 'rebounds']:
+            try:
+                model = XGBoostNBAModel(stat_type=stat_type)
+                result = model.train(player, '2024-25', save_model=False)
+                
+                if result['status'] == 'SUCCESS':
+                    results.append({
+                        'player': player,
+                        'stat': stat_type,
+                        'test_r2': round(result['test_metrics']['r2'], 3),
+                        'train_r2': round(result['train_metrics']['r2'], 3)
+                    })
+            except:
+                pass
+    
+    return jsonify({'results': results})
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
