@@ -3,6 +3,7 @@
 """
 NBA Betting Analyzer - API Backend avec XGBoost
 VERSION OPTIMISÉE: 3 endpoints séparés + 5 props + TEST R²
+PARTIE 1/2
 """
 
 import os
@@ -324,6 +325,13 @@ def scan_opportunities_by_type(stat_type, limit=5):
         }), 500
 
 # ============================================================================
+# FIN PARTIE 1/2 - COLLER PARTIE 2 ICI
+# ============================================================================
+# ============================================================================
+# PARTIE 2/2 - COLLER APRÈS PARTIE 1
+# ============================================================================
+
+# ============================================================================
 # PLAYER HISTORY ENDPOINT
 # ============================================================================
 
@@ -493,9 +501,6 @@ def get_odds_usage():
     return jsonify({'error': 'Odds API not available'}), 503
 
 
-# ============================================================================
-# MAIN
-# ============================================================================
 @app.route('/api/test-model-quality', methods=['GET'])
 def test_model_quality():
     """Teste R² sur joueurs stars"""
@@ -517,12 +522,146 @@ def test_model_quality():
                         'player': player,
                         'stat': stat_type,
                         'test_r2': round(result['test_metrics']['r2'], 3),
-                        'train_r2': round(result['train_metrics']['r2'], 3)
+                        'train_r2': round(result['train_metrics']['r2'], 3),
+                        'predictability': round(result['predictability']['score'], 1)
                     })
+                else:
+                    results.append({
+                        'player': player,
+                        'stat': stat_type,
+                        'status': result['status'],
+                        'message': result.get('message', 'Unknown')
+                    })
+            except Exception as e:
+                results.append({
+                    'player': player,
+                    'stat': stat_type,
+                    'error': str(e)
+                })
+    
+    return jsonify({'status': 'SUCCESS', 'results': results})
+
+
+@app.route('/api/model-diagnostics', methods=['GET'])
+def model_diagnostics():
+    """
+    Diagnostics complets du modèle:
+    - Feature importance
+    - Corrélations
+    - T-tests de significativité
+    """
+    
+    if not XGBOOST_AVAILABLE:
+        return jsonify({'error': 'XGBoost not available'}), 503
+    
+    player = request.args.get('player', 'LeBron James')
+    stat_type = request.args.get('stat_type', 'points')
+    
+    try:
+        print(f"\n📊 Diagnostics for {player} - {stat_type}")
+        
+        # Entraîne le modèle
+        model = XGBoostNBAModel(stat_type=stat_type)
+        result = model.train(player, '2024-25', save_model=False)
+        
+        if result['status'] != 'SUCCESS':
+            return jsonify({
+                'status': 'ERROR',
+                'message': result.get('message', 'Training failed')
+            }), 400
+        
+        # 1. Feature importance (XGBoost)
+        feature_importance = model.model.feature_importances_
+        feature_names = model.model.get_booster().feature_names
+        
+        if feature_names is None:
+            # Génère noms génériques
+            feature_names = [f'feature_{i}' for i in range(len(feature_importance))]
+        
+        # Trie par importance
+        importance_dict = dict(zip(feature_names, feature_importance))
+        sorted_features = sorted(importance_dict.items(), key=lambda x: x[1], reverse=True)
+        
+        top_features = [
+            {
+                'name': name,
+                'importance': round(float(imp), 4),
+                'importance_percent': round(float(imp) * 100, 2)
+            }
+            for name, imp in sorted_features[:20]  # Top 20
+        ]
+        
+        # 2. Statistiques du modèle
+        stats = model.training_stats
+        
+        # 3. Calcule les corrélations (approximation de significativité)
+        df = collector.get_complete_player_data(player)
+        stat_col = {'points': 'PTS', 'assists': 'AST', 'rebounds': 'REB'}[stat_type]
+        
+        features_df = collector.prepare_features_for_prediction(player, '', True)
+        
+        # Aligne
+        min_len = min(len(features_df), len(df))
+        features_df = features_df.iloc[:min_len]
+        target = df.sort_values('GAME_DATE', ascending=False).iloc[:min_len][stat_col]
+        
+        # Calcule corrélations
+        correlations = []
+        for col in features_df.columns:
+            try:
+                from scipy.stats import pearsonr
+                corr, p_value = pearsonr(features_df[col], target)
+                
+                # Calcule t-statistic
+                n = len(features_df)
+                t_stat = corr * np.sqrt(n - 2) / np.sqrt(1 - corr**2) if abs(corr) < 1 else 0
+                
+                correlations.append({
+                    'feature': col,
+                    'correlation': round(float(corr), 4),
+                    'p_value': round(float(p_value), 6),
+                    't_statistic': round(float(t_stat), 4),
+                    'significant': p_value < 0.05
+                })
             except:
                 pass
+        
+        # Trie par corrélation absolue
+        correlations.sort(key=lambda x: abs(x['correlation']), reverse=True)
+        
+        return jsonify({
+            'status': 'SUCCESS',
+            'player': player,
+            'stat_type': stat_type,
+            'model_performance': {
+                'train_r2': round(stats['train_metrics']['r2'], 3),
+                'test_r2': round(stats['test_metrics']['r2'], 3),
+                'test_rmse': round(stats['test_metrics']['rmse'], 2),
+                'cv_r2_mean': round(stats['cv_results']['r2_mean'], 3)
+            },
+            'predictability': stats.get('predictability', {}),
+            'feature_importance': top_features,
+            'correlations': correlations[:20],  # Top 20
+            'data_info': {
+                'total_games': stats['data']['total_games'],
+                'clean_games': stats['data']['clean_games'],
+                'outliers_removed': stats['data']['outliers_removed']
+            }
+        })
     
-    return jsonify({'results': results})
+    except Exception as e:
+        print(f"❌ Diagnostics error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({
+            'status': 'ERROR',
+            'message': str(e)
+        }), 500
+
+
+# ============================================================================
+# MAIN
+# ============================================================================
 
 if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
@@ -536,4 +675,4 @@ if __name__ == '__main__':
     print(f"Port: {port}")
     print("="*70 + "\n")
     
-    app.run(host='0.0.0.0', port=port, debug=debug) 
+    app.run(host='0.0.0.0', port=port, debug=debug)
