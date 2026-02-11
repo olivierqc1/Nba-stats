@@ -13,7 +13,7 @@ from nba_api.stats.endpoints import playergamelog
 from nba_api.stats.static import players
 import time
 
-class SimpleDataCollector:
+class AdvancedDataCollector:
     """Collector MINIMAL - Garantit des données"""
     
     def __init__(self):
@@ -178,7 +178,7 @@ class SimpleDataCollector:
 
 # Test rapide
 if __name__ == "__main__":
-    collector = SimpleDataCollector()
+    collector = AdvancedDataCollector()
     
     # Test LeBron
     df = collector.get_complete_player_data("LeBron James", "2024-25")
