@@ -11,7 +11,7 @@ from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_error
 import xgboost as xgb
 
-class XGBoostNBAModel:
+class ModelManager:
     """Modèle SIMPLE - Features minimales pour stabilité maximale"""
     
     def __init__(self, stat_type='points'):
