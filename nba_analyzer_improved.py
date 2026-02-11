@@ -509,4 +509,4 @@ if __name__ == '__main__':
     print(f"Port: {port}")
     print("="*70 + "\n")
     
-    app.run(host='0.0.0.0', port=port, debug=debug)
+    app.run(host='0.0.0.0', port=port, debug=debug) 
