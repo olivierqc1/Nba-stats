@@ -300,6 +300,11 @@ class ModelManager:
         }
 
 
+# Alias pour compatibilité avec différents imports du backend
+# Le backend peut importer soit ModelManager soit XGBoostNBAModel
+XGBoostNBAModel = ModelManager  # Alias principal
+
+
 # Test
 if __name__ == "__main__":
     print("Simple XGBoost Model - Ready")
