@@ -193,4 +193,4 @@ if __name__ == "__main__":
         print(f"\nStats moyennes:")
         print(df[['PTS', 'AST', 'REB', 'avg_pts_last_5', 'avg_pts_last_10']].describe())
     else:
-        print("\n❌ ÉCHEC - Pas de données collectées")
+        print("\n❌ ÉCHEC - Pas de données collectées") 
