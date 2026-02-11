@@ -19,7 +19,7 @@ class AdvancedDataCollector:
     def __init__(self):
         self.cache = {}
         
-    def get_complete_player_data(self, player_name, season='2024-25'):
+    def get_complete_player_data(self, player_name, season='2025-26'):
         """
         Récupère données player - VERSION ULTRA-SIMPLE
         
@@ -181,7 +181,7 @@ if __name__ == "__main__":
     collector = AdvancedDataCollector()
     
     # Test LeBron
-    df = collector.get_complete_player_data("LeBron James", "2024-25")
+    df = collector.get_complete_player_data("LeBron James", "2025-26")
     
     if df is not None:
         print("\n" + "="*60)
