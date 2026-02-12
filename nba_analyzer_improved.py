@@ -177,16 +177,16 @@ def daily_opportunities_points():
 @app.route('/api/daily-opportunities-assists', methods=['GET'])
 def daily_opportunities_assists():
     """Scan 5 opportunités ASSISTS aléatoires"""
-    return scan_opportunities_by_type('assists', limit=10)
+    return scan_opportunities_by_type('assists', limit=18)
 
 
 @app.route('/api/daily-opportunities-rebounds', methods=['GET'])
 def daily_opportunities_rebounds():
     """Scan 5 opportunités REBOUNDS aléatoires"""
-    return scan_opportunities_by_type('rebounds', limit=10)
+    return scan_opportunities_by_type('rebounds', limit=18)
 
 
-def scan_opportunities_by_type(stat_type, limit=10):
+def scan_opportunities_by_type(stat_type, limit=18):
     """
     Scan opportunités pour UN type de stat avec randomisation
     FIX: Utilise 'stat_type' au lieu de 'market'
