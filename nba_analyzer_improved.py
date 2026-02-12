@@ -171,22 +171,22 @@ def analyze_betting_line(prediction, confidence_interval, line):
 @app.route('/api/daily-opportunities-points', methods=['GET'])
 def daily_opportunities_points():
     """Scan 5 opportunités POINTS aléatoires"""
-    return scan_opportunities_by_type('points', limit=5)
+    return scan_opportunities_by_type('points', limit=10)
 
 
 @app.route('/api/daily-opportunities-assists', methods=['GET'])
 def daily_opportunities_assists():
     """Scan 5 opportunités ASSISTS aléatoires"""
-    return scan_opportunities_by_type('assists', limit=5)
+    return scan_opportunities_by_type('assists', limit=10)
 
 
 @app.route('/api/daily-opportunities-rebounds', methods=['GET'])
 def daily_opportunities_rebounds():
     """Scan 5 opportunités REBOUNDS aléatoires"""
-    return scan_opportunities_by_type('rebounds', limit=5)
+    return scan_opportunities_by_type('rebounds', limit=10)
 
 
-def scan_opportunities_by_type(stat_type, limit=5):
+def scan_opportunities_by_type(stat_type, limit=10):
     """
     Scan opportunités pour UN type de stat avec randomisation
     FIX: Utilise 'stat_type' au lieu de 'market'
