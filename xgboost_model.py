@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-XGBoost NBA Model - VERSION COMPATIBLE BACKEND
+XGBoost NBA Model - VERSION FINALE BACKEND COMPATIBLE
 Interface correcte: train(player_name, season, save_model)
+Saison par défaut: 2024-25
 """
 
 import numpy as np
@@ -42,7 +43,7 @@ class XGBoostNBAModel:
         # Collector
         self.collector = AdvancedDataCollector()
     
-    def train(self, player_name, season='2025-26', save_model=True):
+    def train(self, player_name, season='2024-25', save_model=True):
         """
         Entraîne le modèle sur un joueur
         
@@ -92,7 +93,7 @@ class XGBoostNBAModel:
                     'stat': self.stat_type
                 }
             
-            # 3. Split train/test
+            # 3. Split train/test (chronologique: train = vieux, test = récents)
             X_train, X_test, y_train, y_test = train_test_split(
                 X, y, test_size=0.2, random_state=42, shuffle=False
             )
@@ -138,7 +139,7 @@ class XGBoostNBAModel:
             print(f"   Test R²:  {test_metrics['r2']:.3f}")
             print(f"   Test RMSE: {test_metrics['rmse']:.2f}")
             
-            # 7. Predictability score (basé sur R²)
+            # 7. Predictability score (basé sur R² TEST, pas train!)
             pred_score = max(0, min(100, test_metrics['r2'] * 100))
             
             if pred_score >= 50:
@@ -287,12 +288,12 @@ class XGBoostNBAModel:
         return float(prediction)
 
 
-# Alias pour compatibilité
+# Alias pour compatibilité avec backend
 ModelManager = XGBoostNBAModel
 
 
 # Test
 if __name__ == "__main__":
     print("XGBoost NBA Model - Backend Compatible")
-    print("Interface: train(player_name, season, save_model)")
+    print("Interface: train(player_name, season='2024-25', save_model)")
     print("Returns: dict with status, test_metrics, train_metrics, predictability")
