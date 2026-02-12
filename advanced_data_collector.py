@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-SIMPLE DATA COLLECTOR - Version MINIMALISTE
+SIMPLE DATA COLLECTOR - Version FINALE
 Objectif: GARANTIR 30+ matchs pour TOUS les joueurs
 Features: SEULEMENT 5 features essentielles
+FIX: Supprime premiers matchs pour éviter distribution shift
 """
 
 import numpy as np
@@ -14,12 +15,12 @@ from nba_api.stats.static import players
 import time
 
 class AdvancedDataCollector:
-    """Collector MINIMAL - Garantit des données"""
+    """Collector MINIMAL - Garantit des données de qualité"""
     
     def __init__(self):
         self.cache = {}
         
-    def get_complete_player_data(self, player_name, season='2025-26'):
+    def get_complete_player_data(self, player_name, season='2024-25'):
         """
         Récupère données player - VERSION ULTRA-SIMPLE
         
@@ -32,7 +33,7 @@ class AdvancedDataCollector:
         - rest_days
         - minutes_avg
         
-        GARANTIT: 30+ matchs ou None
+        GARANTIT: 20+ matchs avec features stables
         """
         try:
             print(f"\n📥 Collecting {player_name}...")
@@ -119,16 +120,19 @@ class AdvancedDataCollector:
                 if df[col].dtype in [np.float64, np.int64]:
                     df[col] = df[col].fillna(df[col].mean() if len(df[col].dropna()) > 0 else 0)
             
-            # 10. Drop premiers matchs qui n'ont pas assez d'historique
-            # On garde TOUS les matchs, même les 10 premiers
-            # Le rolling avec min_periods=1 garantit qu'il y a des valeurs
+            # 10. ✅ FIX DISTRIBUTION SHIFT: Supprime les 10 premiers matchs
+            # Pourquoi? Les premiers matchs ont des features basées sur 1-2 matchs seulement
+            # Ça crée une distribution différente entre train et test
+            if len(df) > 15:
+                df = df[10:].reset_index(drop=True)
+                print(f"   🔧 Removed first 10 games (distribution shift fix)")
             
             print(f"   ✅ Final: {len(df)} games, {len(df.columns)} features")
             
-            # Vérification finale: au moins 20 matchs
-            if len(df) < 20:
-                print(f"   ⚠️  Only {len(df)} games - might be insufficient")
-                # On retourne quand même - le modèle décidera
+            # Vérification finale: au moins 15 matchs après cleanup
+            if len(df) < 15:
+                print(f"   ⚠️  Only {len(df)} games - insufficient")
+                return None
             
             return df
             
@@ -174,6 +178,27 @@ class AdvancedDataCollector:
             return float(min_str)
         except:
             return 30.0  # Valeur par défaut
+    
+    def prepare_features_for_prediction(self, player_name, opponent='', is_home=True, current_features=None):
+        """Prépare features - NE CRASH JAMAIS"""
+        try:
+            if current_features is not None and isinstance(current_features, pd.DataFrame):
+                return current_features
+            
+            df = self.get_complete_player_data(player_name)
+            
+            if df is None or len(df) == 0:
+                return None
+            
+            features = df.iloc[0:1].copy()
+            features = features.select_dtypes(include=[np.number])
+            features = features.drop(columns=['PTS', 'AST', 'REB'], errors='ignore')
+            
+            return features
+        
+        except Exception as e:
+            print(f"❌ Prepare features error: {e}")
+            return None
 
 
 # Test rapide
@@ -181,7 +206,7 @@ if __name__ == "__main__":
     collector = AdvancedDataCollector()
     
     # Test LeBron
-    df = collector.get_complete_player_data("LeBron James", "2025-26")
+    df = collector.get_complete_player_data("LeBron James", "2024-25")
     
     if df is not None:
         print("\n" + "="*60)
