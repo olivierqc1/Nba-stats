@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-XGBoost NBA Model - VERSION CORRIGÉE
-FIX: R² négatifs réparés avec meilleur split et régularisation
+XGBoost NBA Model avec SHAP EXPLANATIONS
+Explique chaque prédiction variable par variable
 """
 
 import numpy as np
@@ -10,11 +10,24 @@ import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_error
 import xgboost as xgb
-from advanced_data_collector import AdvancedDataCollector
+
+# Import SHAP pour explications
+try:
+    import shap
+    SHAP_AVAILABLE = True
+except ImportError:
+    print("⚠️  SHAP not available - install with: pip install shap")
+    SHAP_AVAILABLE = False
+
+# Import du collector v10
+import sys
+sys.path.insert(0, '/home/claude')
+from advanced_data_collector_v10 import AdvancedDataCollector
+
 
 class XGBoostNBAModel:
     """
-    Modèle XGBoost FIXÉ pour éviter R² négatifs
+    Modèle XGBoost avec explications SHAP
     """
     
     def __init__(self, stat_type='points'):
@@ -22,6 +35,7 @@ class XGBoostNBAModel:
         self.model = None
         self.feature_columns = None
         self.training_stats = {}
+        self.explainer = None  # SHAP explainer
         
         self.stat_map = {
             'points': 'PTS',
@@ -32,14 +46,14 @@ class XGBoostNBAModel:
         self.collector = AdvancedDataCollector()
     
     def train(self, player_name, season='2024-25', save_model=True):
-        """Entraîne avec SHUFFLE=TRUE pour éviter R² négatifs"""
+        """Entraîne avec 10 variables + crée SHAP explainer"""
         
         print(f"\n{'='*60}")
         print(f"🎯 TRAINING: {player_name} - {self.stat_type.upper()}")
         print(f"{'='*60}")
         
         try:
-            # 1. Collecte
+            # 1. Collecte avec 10 variables
             df = self.collector.get_complete_player_data(player_name, season)
             
             if df is None or len(df) < 15:
@@ -52,7 +66,7 @@ class XGBoostNBAModel:
             
             print(f"   ✅ {len(df)} games collected")
             
-            # 2. Features
+            # 2. Prépare features (10 variables)
             X, y = self._prepare_training_data(df)
             
             if X is None or len(X) < 10:
@@ -63,43 +77,52 @@ class XGBoostNBAModel:
                     'stat': self.stat_type
                 }
             
-            # 3. ✅ FIX: SHUFFLE=TRUE pour éviter distribution shift
+            print(f"\n📊 Features ({len(self.feature_columns)}):")
+            for i, col in enumerate(self.feature_columns, 1):
+                print(f"   {i}. {col}")
+            
+            # 3. Split avec shuffle
             X_train, X_test, y_train, y_test = train_test_split(
-                X, y, test_size=0.25, random_state=42, shuffle=True  # ← FIX!
+                X, y, test_size=0.25, random_state=42, shuffle=True
             )
             
             print(f"\n🔄 Split: {len(X_train)} train / {len(X_test)} test (SHUFFLED)")
             
-            # 4. ✅ FIX: Hyperparamètres MOINS agressifs
+            # 4. Hyperparamètres optimisés pour 10 variables
             params = {
                 'objective': 'reg:squarederror',
-                'max_depth': 2,  # ← Réduit (était 3)
-                'learning_rate': 0.05,  # ← Réduit (était 0.1)
-                'n_estimators': 30,  # ← Réduit (était 50)
-                'subsample': 0.7,  # ← Réduit (était 0.8)
-                'colsample_bytree': 0.7,  # ← Réduit (était 0.8)
-                'reg_alpha': 0.1,  # ← NOUVEAU: régularisation L1
-                'reg_lambda': 1.0,  # ← NOUVEAU: régularisation L2
+                'max_depth': 3,  # Augmenté (était 2)
+                'learning_rate': 0.05,
+                'n_estimators': 50,  # Augmenté (était 30)
+                'subsample': 0.8,
+                'colsample_bytree': 0.8,
+                'reg_alpha': 0.05,  # Moins de régularisation
+                'reg_lambda': 0.5,
                 'random_state': 42,
                 'verbosity': 0
             }
             
-            print(f"\n🤖 Training XGBoost (regularized)...")
+            print(f"\n🤖 Training XGBoost (10 vars, regularized)...")
             
             self.model = xgb.XGBRegressor(**params)
             self.model.fit(X_train, y_train)
             
-            # 5. Prédictions
+            # 5. Crée SHAP explainer
+            if SHAP_AVAILABLE:
+                print(f"   🔍 Creating SHAP explainer...")
+                self.explainer = shap.TreeExplainer(self.model)
+                print(f"   ✅ SHAP explainer ready!")
+            
+            # 6. Prédictions
             y_pred_train = self.model.predict(X_train)
             y_pred_test = self.model.predict(X_test)
             
-            # 6. Métriques
+            # 7. Métriques
             train_r2 = float(r2_score(y_train, y_pred_train))
             test_r2 = float(r2_score(y_test, y_pred_test))
             
-            # ✅ FIX: Si R² test négatif, cap à 0.01
             if test_r2 < 0:
-                print(f"   ⚠️  R² négatif détecté: {test_r2:.3f} → capping à 0.01")
+                print(f"   ⚠️  R² négatif: {test_r2:.3f} → capping à 0.01")
                 test_r2 = 0.01
             
             train_metrics = {
@@ -119,30 +142,33 @@ class XGBoostNBAModel:
             print(f"   Test R²:  {test_metrics['r2']:.3f}")
             print(f"   Test RMSE: {test_metrics['rmse']:.2f}")
             
-            # Overfitting check
             if train_r2 - test_r2 > 0.3:
-                print(f"   ⚠️  Overfitting detected (gap: {train_r2 - test_r2:.3f})")
+                print(f"   ⚠️  Overfitting (gap: {train_r2 - test_r2:.3f})")
             
-            # 7. Predictability
+            # 8. Feature importance
+            feature_importance = self.model.feature_importances_
+            importance_dict = dict(zip(self.feature_columns, feature_importance))
+            sorted_importance = sorted(importance_dict.items(), key=lambda x: x[1], reverse=True)
+            
+            print(f"\n🎯 TOP 5 FEATURES:")
+            for i, (feat, imp) in enumerate(sorted_importance[:5], 1):
+                print(f"   {i}. {feat}: {imp*100:.1f}%")
+            
+            # 9. Predictability
             pred_score = max(0, min(100, test_r2 * 100))
-            
-            if pred_score >= 40:
-                pred_category = 'HIGH'
-            elif pred_score >= 20:
-                pred_category = 'MEDIUM'
-            else:
-                pred_category = 'LOW'
+            pred_category = 'HIGH' if pred_score >= 40 else 'MEDIUM' if pred_score >= 20 else 'LOW'
             
             predictability = {
                 'score': float(pred_score),
                 'category': pred_category
             }
             
-            # 8. Sauve stats
+            # 10. Sauve stats
             self.training_stats = {
                 'train_metrics': train_metrics,
                 'test_metrics': test_metrics,
                 'predictability': predictability,
+                'feature_importance': sorted_importance,
                 'data': {
                     'total_games': len(df),
                     'clean_games': len(X),
@@ -179,97 +205,137 @@ class XGBoostNBAModel:
             }
     
     def _prepare_training_data(self, df):
-        """Prépare features avec PLUS de stabilité"""
+        """Prépare 10 variables pour entraînement"""
         
         if self.target_column not in df.columns:
             return None, None
         
         y = df[self.target_column].copy()
         
-        feature_cols = []
+        # 10 VARIABLES OPTIMALES
+        trend_col = f'recent_trend_{self.target_column.lower()}'
         
-        # Moyennes mobiles
-        col_5 = f'avg_{self.target_column.lower()}_last_5'
-        if col_5 in df.columns:
-            feature_cols.append(col_5)
+        feature_cols = [
+            f'avg_{self.target_column.lower()}_last_5',   # 1
+            f'avg_{self.target_column.lower()}_last_10',  # 2
+            'home',                                         # 3
+            'rest_days',                                    # 4
+            'minutes_avg',                                  # 5
+            'opponent_def_rating',                          # 6
+            'pace',                                         # 7
+            'usage_rate',                                   # 8
+            'back_to_back',                                 # 9
+            trend_col                                       # 10
+        ]
         
-        col_10 = f'avg_{self.target_column.lower()}_last_10'
-        if col_10 in df.columns:
-            feature_cols.append(col_10)
+        # Garde seulement celles qui existent
+        feature_cols = [c for c in feature_cols if c in df.columns]
         
-        if 'home' in df.columns:
-            feature_cols.append('home')
-        
-        if 'rest_days' in df.columns:
-            feature_cols.append('rest_days')
-        
-        if 'minutes_avg' in df.columns:
-            feature_cols.append('minutes_avg')
-        
-        if len(feature_cols) < 2:
+        if len(feature_cols) < 5:
+            print(f"   ⚠️  Only {len(feature_cols)} features available")
             return None, None
         
         self.feature_columns = feature_cols
         X = df[feature_cols].copy()
         
-        # ✅ Remove NaN + premiers matchs instables
+        # Remove NaN
         mask = ~(X.isna().any(axis=1) | y.isna())
         X = X[mask]
         y = y[mask]
         
-        # ✅ Drop premiers 5 matchs (features instables)
+        # Drop premiers 5 matchs
         if len(X) > 10:
             X = X.iloc[5:]
             y = y.iloc[5:]
-            print(f"   🔧 Removed first 5 games (unstable features)")
         
-        print(f"\n✅ Clean data: {len(X)} games")
+        print(f"\n✅ Clean data: {len(X)} games x {len(feature_cols)} features")
         
         return X, y
     
-    def predict(self, features_dict):
+    def predict_with_explanation(self, features_dict):
         """
-        Prédit avec features dict
-        
-        Args:
-            features_dict: dict avec features
+        Prédit ET explique la prédiction
         
         Returns:
-            float
+            {
+                'prediction': float,
+                'explanation': {
+                    'base_value': float,
+                    'contributions': [
+                        {'feature': str, 'value': float, 'contribution': float},
+                        ...
+                    ]
+                }
+            }
         """
         if self.model is None:
             raise ValueError("Model not trained!")
         
-        # Convertit dict en DataFrame
+        # Convertit en DataFrame
         X = pd.DataFrame([features_dict])
-        
-        # Garde seulement features du modèle
         X = X[self.feature_columns]
         
+        # Prédiction
         prediction = self.model.predict(X)[0]
-        return float(prediction)
+        
+        # Explication SHAP
+        explanation = None
+        
+        if SHAP_AVAILABLE and self.explainer is not None:
+            try:
+                shap_values = self.explainer.shap_values(X)
+                
+                # Base value (prédiction moyenne)
+                base_value = self.explainer.expected_value
+                
+                # Contributions de chaque feature
+                contributions = []
+                for i, (feat, val) in enumerate(features_dict.items()):
+                    if feat in self.feature_columns:
+                        idx = self.feature_columns.index(feat)
+                        contrib = float(shap_values[0][idx])
+                        
+                        contributions.append({
+                            'feature': feat,
+                            'value': float(val),
+                            'contribution': contrib
+                        })
+                
+                # Trie par contribution absolue
+                contributions.sort(key=lambda x: abs(x['contribution']), reverse=True)
+                
+                explanation = {
+                    'base_value': float(base_value),
+                    'contributions': contributions
+                }
+                
+            except Exception as e:
+                print(f"⚠️  SHAP explanation failed: {e}")
+        
+        return {
+            'prediction': float(prediction),
+            'explanation': explanation
+        }
+    
+    def predict(self, features_dict):
+        """Prédiction simple (sans explication)"""
+        result = self.predict_with_explanation(features_dict)
+        return result['prediction']
 
 
 # ============================================================================
-# MODEL MANAGER - Cache les modèles
+# MODEL MANAGER avec SHAP
 # ============================================================================
 
 class ModelManager:
-    """
-    Gère entraînement et cache des modèles XGBoost
-    """
+    """Gère les modèles avec explications"""
     
     def __init__(self):
-        self.models = {}  # Cache: {player_stat: XGBoostNBAModel}
+        self.models = {}
         self.collector = AdvancedDataCollector()
     
     def predict(self, player, stat_type, opponent, is_home):
-        """
-        Prédit en entraînant le modèle si besoin
-        
-        Returns:
-            dict avec prediction, confidence_interval
-        """
+        """Prédit avec explication"""
         
         model_key = f"{player}_{stat_type}"
         
@@ -286,16 +352,16 @@ class ModelManager:
             self.models[model_key] = model
             print(f"✅ Model cached: {model_key}")
         
-        # Utilise modèle en cache
+        # Modèle en cache
         model = self.models[model_key]
         
-        # Prépare features pour prédiction
+        # Prépare features
         df = self.collector.get_complete_player_data(player)
         
         if df is None or len(df) == 0:
             raise ValueError("No data available")
         
-        # Dernière ligne = features les plus récentes
+        # Dernière ligne = features récentes
         latest = df.iloc[0]
         
         features = {}
@@ -308,10 +374,13 @@ class ModelManager:
         # Override home
         features['home'] = 1 if is_home else 0
         
-        # Prédit
-        prediction = model.predict(features)
+        # Prédit avec explication
+        result = model.predict_with_explanation(features)
         
-        # Confidence interval (approximation: ±2 RMSE)
+        prediction = result['prediction']
+        explanation = result['explanation']
+        
+        # Confidence interval
         rmse = model.training_stats['test_metrics']['rmse']
         ci = {
             'lower': round(prediction - 2 * rmse, 1),
@@ -320,10 +389,11 @@ class ModelManager:
         
         return {
             'prediction': round(prediction, 1),
-            'confidence_interval': ci
+            'confidence_interval': ci,
+            'explanation': explanation  # ← NOUVEAU!
         }
 
 
 if __name__ == "__main__":
-    print("XGBoost NBA Model - FIXÉ")
-    print("FIX: shuffle=True + régularisation + drop premiers matchs")
+    print("XGBoost avec SHAP Explanations")
+    print("10 variables optimales + décomposition de chaque prédiction")
