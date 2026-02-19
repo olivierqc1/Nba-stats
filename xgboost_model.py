@@ -22,7 +22,7 @@ except ImportError:
 # Import du collector v10
 import sys
 sys.path.insert(0, '/home/claude')
-from advanced_data_collector_v10 import AdvancedDataCollector
+from advanced_data_collector import AdvancedDataCollector
 
 
 class XGBoostNBAModel:
