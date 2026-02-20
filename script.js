@@ -277,6 +277,74 @@ function createOpportunityCard(opp, rank) {
     const betRangeLower = rec === 'OVER' ? line : ci.lower;
     const betRangeUpper = rec === 'OVER' ? ci.upper : line;
 
+    // ✅ NOUVEAUTÉ: SHAP EXPLANATIONS
+    const shapSection = opp.explanation && opp.explanation.contributions ? `
+        <div style="margin-top: 15px; padding: 15px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 10px; color: white;">
+            <strong style="font-size: 1.1em;">🔍 DÉCOMPOSITION SHAP - Pourquoi ${opp.prediction.toFixed(1)}?</strong>
+            <div style="margin-top: 10px; padding: 10px; background: rgba(255,255,255,0.15); border-radius: 8px;">
+                <div style="font-size: 1em; margin-bottom: 12px; padding: 8px; background: rgba(255,255,255,0.2); border-radius: 6px;">
+                    <strong>📊 Base:</strong> ${opp.explanation.base_value.toFixed(1)} pts (moyenne saison)
+                </div>
+                ${opp.explanation.contributions.slice(0, 8).map(c => {
+                    const isPositive = c.contribution > 0;
+                    const color = isPositive ? '#10b981' : '#ef4444';
+                    const icon = isPositive ? '➕' : '➖';
+                    const barWidth = Math.min(Math.abs(c.contribution) * 30, 100);
+                    
+                    // Nom lisible
+                    const featureName = c.feature
+                        .replace('avg_pts_last_5', 'Moy. 5 derniers')
+                        .replace('avg_ast_last_5', 'Moy. AST 5 derniers')
+                        .replace('avg_reb_last_5', 'Moy. REB 5 derniers')
+                        .replace('avg_pts_last_10', 'Moy. 10 derniers')
+                        .replace('avg_ast_last_10', 'Moy. AST 10 derniers')
+                        .replace('avg_reb_last_10', 'Moy. REB 10 derniers')
+                        .replace('home', 'Domicile')
+                        .replace('rest_days', 'Jours repos')
+                        .replace('minutes_avg', 'Minutes moy.')
+                        .replace('opponent_def_rating', 'Def adverse')
+                        .replace('pace', 'Rythme')
+                        .replace('usage_rate', 'Usage rate')
+                        .replace('back_to_back', 'Back-to-back')
+                        .replace('recent_trend_pts', 'Tendance PTS')
+                        .replace('recent_trend_ast', 'Tendance AST')
+                        .replace('recent_trend_reb', 'Tendance REB');
+                    
+                    return `
+                    <div style="margin: 10px 0;">
+                        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+                            <span style="font-size: 0.9em; opacity: 0.95; font-weight: 600;">${featureName}</span>
+                            <span style="font-weight: 700; color: ${color}; font-size: 1em;">
+                                ${icon} ${Math.abs(c.contribution).toFixed(2)} pts
+                            </span>
+                        </div>
+                        <div style="background: rgba(255,255,255,0.25); height: 10px; border-radius: 5px; overflow: hidden;">
+                            <div style="background: ${color}; height: 100%; width: ${barWidth}%; transition: width 0.3s;"></div>
+                        </div>
+                        <div style="font-size: 0.8em; opacity: 0.85; margin-top: 3px;">
+                            Valeur: ${c.value.toFixed(2)}
+                        </div>
+                    </div>
+                    `;
+                }).join('')}
+                <div style="margin-top: 15px; padding: 12px; background: rgba(255,255,255,0.3); border-radius: 8px; text-align: center; border: 2px solid rgba(255,255,255,0.5);">
+                    <strong style="font-size: 1.2em;">= PRÉDICTION: ${opp.prediction.toFixed(1)} ${statLabel.toLowerCase()}</strong>
+                </div>
+            </div>
+        </div>
+    ` : `
+        <div style="margin-top: 15px; padding: 10px; background: #f0f0f0; border-radius: 8px; font-size: 0.9em;">
+            <strong>📈 Variables XGBoost (10):</strong><br>
+            • Moyenne 5 & 10 matchs<br>
+            • Domicile/Extérieur<br>
+            • Jours repos & back-to-back<br>
+            • Minutes & Usage rate<br>
+            • Défense adverse & Pace<br>
+            • Tendance récente (slope)<br>
+            <strong style="color: #667eea;">⚠️ R² = TEST R² (perf réelle!)</strong>
+        </div>
+    `;
+
     return `
         <div class="opp-card ${recClass}" data-rank="${rank}">
             <div class="opp-header">
@@ -341,7 +409,9 @@ function createOpportunityCard(opp, rank) {
                     <div class="toggle-icon">▼</div>
                 </div>
                 <div class="technical-content">
-                    <div class="bet-range">
+                    ${shapSection}
+                    
+                    <div class="bet-range" style="margin-top: 15px;">
                         <div class="bet-range-title">💡 Range de pari recommandé</div>
                         <div class="bet-range-value">
                             ${rec} entre ${betRangeLower.toFixed(1)} et ${betRangeUpper.toFixed(1)}
@@ -351,7 +421,7 @@ function createOpportunityCard(opp, rank) {
                         </div>
                     </div>
                     
-                    <table class="prob-table">
+                    <table class="prob-table" style="margin-top: 15px;">
                         <thead>
                             <tr>
                                 <th>Ligne</th>
@@ -369,16 +439,6 @@ function createOpportunityCard(opp, rank) {
                             `).join('')}
                         </tbody>
                     </table>
-                    
-                    <div style="margin-top: 15px; padding: 10px; background: #f0f0f0; border-radius: 8px; font-size: 0.9em;">
-                        <strong>📈 Variables XGBoost:</strong><br>
-                        • Moyenne mobile 5 matchs<br>
-                        • Performance vs équipe adverse<br>
-                        • Minutes jouées (trend)<br>
-                        • Home/Away advantage<br>
-                        • Form récente (10 matchs)<br>
-                        <strong style="color: #667eea;">⚠️ R² = TEST R² (matchs jamais vus!)</strong>
-                    </div>
                 </div>
             </div>
         </div>
@@ -389,4 +449,4 @@ function displayError(message) {
     const errorDiv = document.getElementById('errorDiv');
     errorDiv.textContent = message;
     errorDiv.classList.remove('hidden');
-} 
+}
