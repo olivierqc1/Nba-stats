@@ -449,4 +449,4 @@ function displayError(message) {
     const errorDiv = document.getElementById('errorDiv');
     errorDiv.textContent = message;
     errorDiv.classList.remove('hidden');
-}
+} 
