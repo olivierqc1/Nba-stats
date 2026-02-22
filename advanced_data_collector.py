@@ -257,4 +257,4 @@ if __name__ == "__main__":
         print(f"\nPremières lignes (aperçu):")
         print(df[['PTS', 'avg_pts_last_5', 'avg_pts_last_10', 'home', 'back_to_back', 'recent_trend_pts']].head())
     else:
-        print("\n❌ ÉCHEC")
+        print("\n❌ ÉCHEC") 
