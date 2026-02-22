@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 NBA Betting Analyzer - API Backend avec XGBoost
-VERSION OPTIMISÉE: 3 endpoints séparés + 5 props + TEST R²
+VERSION OPTIMISÉE: 3 endpoints séparés + 5 props + TEST R² + SHAP EXPLANATIONS
 PARTIE 1/2
 """
 
@@ -47,11 +47,15 @@ model_manager = ModelManager() if XGBOOST_AVAILABLE else None
 
 
 # ============================================================================
-# ANALYSE XGBOOST
+# ANALYSE XGBOOST AVEC SHAP EXPLANATIONS
 # ============================================================================
 
 def analyze_with_xgboost(player, opponent, is_home, stat_type, line):
-    """Analyse avec XGBoost"""
+    """
+    Analyse avec XGBoost + SHAP explanations
+    
+    ✅ FIX v2: Inclut maintenant les SHAP explanations dans la réponse API
+    """
     
     print(f"🤖 Analyse: {player} vs {opponent} ({stat_type})")
     
@@ -63,7 +67,7 @@ def analyze_with_xgboost(player, opponent, is_home, stat_type, line):
     if features is None:
         return {'status': 'ERROR', 'error': 'Unable to collect data'}
     
-    # 2. Prédiction
+    # 2. Prédiction AVEC EXPLICATION
     try:
         prediction_result = model_manager.predict(
             player, stat_type, opponent, is_home
@@ -73,6 +77,7 @@ def analyze_with_xgboost(player, opponent, is_home, stat_type, line):
     
     prediction = prediction_result['prediction']
     confidence_interval = prediction_result['confidence_interval']
+    explanation = prediction_result.get('explanation')  # ← ✅ NOUVEAU: Récupère l'explication!
     
     # 3. Analyse ligne
     line_analysis = analyze_betting_line(prediction, confidence_interval, line)
@@ -90,18 +95,18 @@ def analyze_with_xgboost(player, opponent, is_home, stat_type, line):
         'max': int(df[stat_col].max())
     }
     
-    # ✅ 5. R² du modèle (TEST R², pas train!)
+    # 5. R² du modèle (TEST R², pas train!)
     model_key = f"{player}_{stat_type}"
     if model_key in model_manager.models:
         model_stats = model_manager.models[model_key].training_stats
-        # ✅ FIX: Utilise TEST metrics (vraie performance!)
         r_squared = model_stats.get('test_metrics', {}).get('r2', 0.5)
         rmse = model_stats.get('test_metrics', {}).get('rmse', 5.0)
     else:
         r_squared = 0.50
         rmse = 5.0
     
-    return {
+    # ✅ 6. CONSTRUIT LA RÉPONSE
+    response = {
         'status': 'SUCCESS',
         'player': player,
         'opponent': opponent,
@@ -118,6 +123,15 @@ def analyze_with_xgboost(player, opponent, is_home, stat_type, line):
         },
         'data_source': 'NBA API + XGBoost'
     }
+    
+    # ✅ 7. AJOUTE L'EXPLICATION SHAP SI DISPONIBLE (NOUVEAU!)
+    if explanation is not None:
+        response['explanation'] = explanation
+        print(f"   ✅ SHAP explanation included ({len(explanation.get('contributions', []))} features)")
+    else:
+        print(f"   ⚠️  No SHAP explanation available")
+    
+    return response
 
 
 def analyze_betting_line(prediction, confidence_interval, line):
@@ -189,7 +203,6 @@ def daily_opportunities_rebounds():
 def scan_opportunities_by_type(stat_type, limit=18):
     """
     Scan opportunités pour UN type de stat avec randomisation
-    FIX: Utilise 'stat_type' au lieu de 'market'
     """
     
     min_edge = request.args.get('min_edge', 5.0, type=float)
@@ -215,7 +228,7 @@ def scan_opportunities_by_type(stat_type, limit=18):
         # Récupère TOUTES les props
         all_props = odds_client.get_player_props(days=1)
         
-        # ✅ FIX: Filtre par 'stat_type' directement (pas 'market')
+        # Filtre par 'stat_type'
         filtered_props = [
             p for p in all_props 
             if p.get('stat_type') == stat_type
@@ -324,8 +337,10 @@ def scan_opportunities_by_type(stat_type, limit=18):
             'message': str(e)
         }), 500
 
+
 # ============================================================================
-# FIN PARTIE 1/2 - COLLER PARTIE 2 ICI
+# FIN PARTIE 1/2
+# COLLE PARTIE 2 EN DESSOUS (player-history endpoint et autres)
 # ============================================================================
 # ============================================================================
 # PARTIE 2/2 - COLLER APRÈS PARTIE 1
