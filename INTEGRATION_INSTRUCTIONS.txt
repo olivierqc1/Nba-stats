@@ -1,0 +1,160 @@
+# 🔧 INSTRUCTIONS D'INTÉGRATION DU BET TRACKER
+
+## 📝 MODIFICATIONS À FAIRE DANS index.html
+
+### 1. Ajouter le bouton "Mes Paris" dans le header
+
+Trouve la section `<header>` dans ton index.html et ajoute ce bouton :
+
+```html
+<header>
+    <h1>🏀 NBA Props Analyzer</h1>
+    
+    <!-- AJOUTE CE BOUTON ICI -->
+    <a href="bet-tracker.html" class="btn-tracker">
+        📊 Mes Paris
+    </a>
+    
+    <!-- Reste du header... -->
+</header>
+```
+
+### 2. Ajouter les styles pour le bouton dans style.css (ou dans <style>)
+
+```css
+.btn-tracker {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    color: white;
+    padding: 12px 24px;
+    border-radius: 25px;
+    text-decoration: none;
+    font-weight: 600;
+    box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);
+    z-index: 1000;
+    transition: all 0.3s;
+}
+
+.btn-tracker:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4);
+}
+```
+
+### 3. Ajouter le bouton "Tracker ce pari" dans chaque carte d'opportunité
+
+Dans ta fonction `createOpportunityCard()` dans script.js, ajoute ce bouton :
+
+**Trouve la ligne où tu crées les boutons d'action (probablement vers la fin de la carte):**
+
+```javascript
+// AVANT (exemple)
+const actionsHTML = `
+    <div class="actions">
+        <button onclick="shareOpportunity(...)">Partager</button>
+    </div>
+`;
+
+// APRÈS - Ajoute le bouton tracker
+const actionsHTML = `
+    <div class="actions">
+        <button onclick="addToTracker('${player}', '${propType}', '${side}', ${line}, ${prediction}, ${r2}, ${edge}, '${game}')">
+            ➕ Tracker ce pari
+        </button>
+        <button onclick="shareOpportunity(...)">Partager</button>
+    </div>
+`;
+```
+
+### 4. Ajouter la fonction addToTracker() dans script.js
+
+Ajoute cette fonction à la fin de ton fichier script.js :
+
+```javascript
+function addToTracker(player, propType, side, line, prediction, r2, edge, game) {
+    // Prepare bet data
+    const betData = {
+        playerName: player,
+        propType: propType,
+        betSide: side,
+        line: line,
+        prediction: prediction,
+        r2: r2,
+        edge: edge,
+        game: game
+    };
+    
+    // Store in localStorage temporarily
+    localStorage.setItem('pendingBet', JSON.stringify(betData));
+    
+    // Redirect to tracker with auto-fill
+    window.location.href = 'bet-tracker.html?autofill=true';
+}
+```
+
+### 5. Modifier bet-tracker.js pour auto-remplir le formulaire
+
+Ajoute ce code dans bet-tracker.js, APRÈS le `document.addEventListener('DOMContentLoaded', ...)` :
+
+```javascript
+// Check for auto-fill from recommendations
+const urlParams = new URLSearchParams(window.location.search);
+if (urlParams.get('autofill') === 'true') {
+    const pendingBet = localStorage.getItem('pendingBet');
+    if (pendingBet) {
+        const bet = JSON.parse(pendingBet);
+        
+        // Fill form
+        document.getElementById('playerName').value = bet.playerName;
+        document.getElementById('propType').value = bet.propType;
+        document.getElementById('betSide').value = bet.betSide;
+        document.getElementById('line').value = bet.line;
+        document.getElementById('prediction').value = bet.prediction;
+        document.getElementById('r2').value = bet.r2;
+        document.getElementById('edge').value = bet.edge;
+        
+        // Clear pending bet
+        localStorage.removeItem('pendingBet');
+        
+        // Scroll to form
+        document.querySelector('.add-bet-section').scrollIntoView({ behavior: 'smooth' });
+        
+        // Show notification
+        alert('✅ Informations pré-remplies! Complète les détails et ajoute le pari.');
+    }
+}
+```
+
+---
+
+## ✅ RÉSULTAT FINAL:
+
+1. **Bouton "📊 Mes Paris"** visible dans le header
+2. **Bouton "➕ Tracker ce pari"** sur chaque recommandation
+3. **Auto-remplissage** du formulaire quand tu cliques sur "Tracker ce pari"
+4. **Navigation fluide** entre recommandations et tracker
+
+---
+
+## 📦 FICHIERS À UPLOADER SUR GITHUB:
+
+1. `bet-tracker.html` ✅
+2. `bet-tracker.css` ✅
+3. `bet-tracker.js` ✅
+4. `index.html` (modifié avec bouton "Mes Paris")
+5. `script.js` (modifié avec fonction addToTracker)
+
+---
+
+## 🚀 DÉPLOIEMENT:
+
+```bash
+git add bet-tracker.html bet-tracker.css bet-tracker.js index.html script.js
+git commit -m "Feature: Add bet tracking dashboard with stats and charts"
+git push origin main
+```
+
+Attends 1-2 min que GitHub Pages rebuild, puis accède à:
+`https://ivierqc1.github.io/bet-tracker.html`
