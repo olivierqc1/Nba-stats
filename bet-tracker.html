@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>📊 Suivi de Mes Paris - NBA Analyzer</title>
+    <link rel="stylesheet" href="bet-tracker.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header>
+            <h1>📊 Suivi de Mes Paris</h1>
+            <a href="index.html" class="btn-back">← Retour aux recommandations</a>
+        </header>
+
+        <!-- Stats Overview -->
+        <div class="stats-overview">
+            <div class="stat-card">
+                <div class="stat-icon">🎯</div>
+                <div class="stat-content">
+                    <div class="stat-label">Win Rate</div>
+                    <div class="stat-value" id="totalWinRate">--%</div>
+                    <div class="stat-detail" id="totalRecord">0-0-0</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">💰</div>
+                <div class="stat-content">
+                    <div class="stat-label">Profit Total</div>
+                    <div class="stat-value" id="totalProfit">--€</div>
+                    <div class="stat-detail" id="totalBets">0 paris</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">📈</div>
+                <div class="stat-content">
+                    <div class="stat-label">ROI</div>
+                    <div class="stat-value" id="totalROI">--%</div>
+                    <div class="stat-detail" id="avgStake">--€ moy.</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon">🔥</div>
+                <div class="stat-content">
+                    <div class="stat-label">Série Actuelle</div>
+                    <div class="stat-value" id="currentStreak">--</div>
+                    <div class="stat-detail" id="bestStreak">Record: --</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Add Bet Form -->
+        <div class="add-bet-section">
+            <h2>➕ Ajouter un Pari</h2>
+            <form id="addBetForm">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Joueur</label>
+                        <input type="text" id="playerName" placeholder="ex: LeBron James" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Type</label>
+                        <select id="propType" required>
+                            <option value="PTS">Points</option>
+                            <option value="REB">Rebounds</option>
+                            <option value="AST">Assists</option>
+                            <option value="3PT">3-Points</option>
+                            <option value="STL">Steals</option>
+                            <option value="BLK">Blocks</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Pari</label>
+                        <select id="betSide" required>
+                            <option value="OVER">OVER</option>
+                            <option value="UNDER">UNDER</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Ligne</label>
+                        <input type="number" id="line" step="0.5" placeholder="ex: 25.5" required>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Prédiction Modèle</label>
+                        <input type="number" id="prediction" step="0.1" placeholder="ex: 28.3" required>
+                    </div>
+                    <div class="form-group">
+                        <label>R² Test</label>
+                        <input type="number" id="r2" step="0.01" min="0" max="1" placeholder="ex: 0.82" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Edge</label>
+                        <input type="number" id="edge" step="0.1" placeholder="ex: 35.8" required>
+                        <span class="input-suffix">%</span>
+                    </div>
+                    <div class="form-group">
+                        <label>Mise</label>
+                        <input type="number" id="stake" step="1" placeholder="ex: 50" required>
+                        <span class="input-suffix">€</span>
+                    </div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Cote</label>
+                        <input type="number" id="odds" step="0.01" value="-110" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Date</label>
+                        <input type="date" id="betDate" required>
+                    </div>
+                    <div class="form-group">
+                        <label>Résultat</label>
+                        <select id="result">
+                            <option value="pending">En cours</option>
+                            <option value="won">Gagné ✅</option>
+                            <option value="lost">Perdu ❌</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Résultat Réel</label>
+                        <input type="number" id="actualResult" step="0.1" placeholder="Optionnel">
+                    </div>
+                </div>
+                <button type="submit" class="btn-submit">➕ Ajouter ce Pari</button>
+            </form>
+        </div>
+
+        <!-- Filters -->
+        <div class="filters">
+            <button class="filter-btn active" data-filter="all">Tous</button>
+            <button class="filter-btn" data-filter="pending">En cours</button>
+            <button class="filter-btn" data-filter="won">Gagnés</button>
+            <button class="filter-btn" data-filter="lost">Perdus</button>
+        </div>
+
+        <!-- Bets Table -->
+        <div class="bets-table-container">
+            <h2>📋 Historique des Paris</h2>
+            <div class="table-wrapper">
+                <table id="betsTable">
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Joueur</th>
+                            <th>Pari</th>
+                            <th>Ligne</th>
+                            <th>Préd.</th>
+                            <th>R²</th>
+                            <th>Edge</th>
+                            <th>Mise</th>
+                            <th>Résultat</th>
+                            <th>Réel</th>
+                            <th>P/L</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="betsTableBody">
+                        <!-- Filled by JS -->
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Charts Section -->
+        <div class="charts-section">
+            <div class="chart-container">
+                <h3>📊 Win Rate par Tranche de R²</h3>
+                <canvas id="winRateByR2Chart"></canvas>
+            </div>
+            <div class="chart-container">
+                <h3>💰 Profit Cumulé</h3>
+                <canvas id="cumulativeProfitChart"></canvas>
+            </div>
+        </div>
+
+        <!-- Analysis Section -->
+        <div class="analysis-section">
+            <div class="analysis-card">
+                <h3>🎯 Performance par Type de Prop</h3>
+                <div id="propTypeStats"></div>
+            </div>
+            <div class="analysis-card">
+                <h3>⭐ Meilleurs Paris</h3>
+                <div id="bestBets"></div>
+            </div>
+            <div class="analysis-card">
+                <h3>⚠️ Pires Paris</h3>
+                <div id="worstBets"></div>
+            </div>
+        </div>
+    </div>
+
+    <script src="bet-tracker.js"></script>
+</body>
+</html>
