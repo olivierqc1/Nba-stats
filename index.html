@@ -19,6 +19,7 @@
             padding: 30px;
             margin-bottom: 20px;
             box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            position: relative;
         }
         .header h1 {
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -28,6 +29,30 @@
             margin-bottom: 5px;
         }
         .header p { color: #666; font-size: 1.1em; }
+        
+        /* BOUTON TRACKER */
+        .btn-tracker {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            color: white;
+            padding: 12px 24px;
+            border-radius: 25px;
+            text-decoration: none;
+            font-weight: 600;
+            box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);
+            z-index: 1000;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .btn-tracker:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4);
+        }
+        
         .filters {
             background: white;
             border-radius: 15px;
@@ -352,14 +377,31 @@
             color: #1e40af;
         }
         .info-banner strong { color: #1e3a8a; }
+        
+        @media (max-width: 768px) {
+            .btn-tracker {
+                position: static;
+                margin: 10px auto;
+                display: inline-flex;
+            }
+            .header {
+                text-align: center;
+            }
+        }
     </style>
 </head>
 <body>
     <div class="container">
+        <!-- Header avec bouton tracker -->
         <div class="header">
             <h1>🎯 Paris NBA ULTRA-FIABLES</h1>
             <p>Prédictions XGBoost - Test R² RÉEL (pas train!)</p>
         </div>
+        
+        <!-- BOUTON TRACKER FIXE -->
+        <a href="bet-tracker.html" class="btn-tracker">
+            📊 Mes Paris
+        </a>
 
         <div class="info-banner">
             <strong>🎲 Nouveau: R² = TEST R² (VRAI performance!)</strong><br>
@@ -444,4 +486,4 @@
 
     <script src="script.js"></script>
 </body>
-</html> 
+</html>
