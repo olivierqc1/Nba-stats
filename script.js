@@ -14,11 +14,12 @@ async function scanOpportunities(statType) {
     const endpoints = {
         'points': 'daily-opportunities-points',
         'assists': 'daily-opportunities-assists',
-        'rebounds': 'daily-opportunities-rebounds'
+        'rebounds': 'daily-opportunities-rebounds',
+        '3pt': 'daily-opportunities-3pt'  // ← NOUVEAU
     };
 
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 180000);
+    const timeoutId = setTimeout(() => controller.abort(), 180000);  // 3 min (Render payant)
 
     try {
         const response = await fetch(
@@ -44,7 +45,7 @@ async function scanOpportunities(statType) {
         console.error('Scan error:', error);
         
         if (error.name === 'AbortError') {
-            displayError('⏱️ Timeout: Le scan a pris trop de temps (>3 min). Upgrade Render ($7/mois) pour plus de capacité.');
+            displayError('⏱️ Timeout: Le scan a pris trop de temps (>3 min). Contacte support Render.');
         } else {
             displayError(`❌ Erreur: ${error.message}`);
         }
@@ -58,7 +59,15 @@ function displayResults(data, statType) {
     const opportunities = data.opportunities || [];
     
     document.getElementById('statsBar').classList.remove('hidden');
-    document.getElementById('statType').textContent = statType.toUpperCase();
+    
+    const statLabels = {
+        'points': 'POINTS',
+        'assists': 'ASSISTS',
+        'rebounds': 'REBOUNDS',
+        '3pt': '3-POINTS'  // ← NOUVEAU
+    };
+    
+    document.getElementById('statType').textContent = statLabels[statType];
     document.getElementById('analyzedProps').textContent = data.total_analyzed;
     document.getElementById('foundOpps').textContent = opportunities.length;
     
@@ -69,7 +78,7 @@ function displayResults(data, statType) {
     }
 
     if (opportunities.length === 0) {
-        displayError(`Aucun pari trouvé avec R² ≥ ${document.getElementById('minR2').value} et Edge ≥ ${document.getElementById('minEdge').value}%. Baisse R² à 0.10 et Edge à 2% pour tester.`);
+        displayError(`Aucun pari trouvé avec R² ≥ ${document.getElementById('minR2').value} et Edge ≥ ${document.getElementById('minEdge').value}%. Baisse R² à 0.10 et Edge à 0% pour tester.`);
         return;
     }
     
@@ -149,6 +158,10 @@ function displayPlayerHistory(data) {
                 <div class="stat-card-value">${stats.avg_rebounds}</div>
             </div>
             <div class="stat-card">
+                <div class="stat-card-label">Moyenne 3PT</div>
+                <div class="stat-card-value">${stats.avg_3pt || 0}</div>
+            </div>
+            <div class="stat-card">
                 <div class="stat-card-label">Minutes/match</div>
                 <div class="stat-card-value">${stats.avg_minutes}</div>
             </div>
@@ -183,6 +196,7 @@ function displayPlayerHistory(data) {
                     <th>PTS</th>
                     <th>AST</th>
                     <th>REB</th>
+                    <th>3PT</th>
                     <th>MIN</th>
                     <th>W/L</th>
                 </tr>
@@ -195,6 +209,7 @@ function displayPlayerHistory(data) {
                         <td><strong>${game.points}</strong></td>
                         <td>${game.assists}</td>
                         <td>${game.rebounds}</td>
+                        <td>${game.three_pointers || 0}</td>
                         <td>${game.minutes}</td>
                         <td class="result-${game.result.toLowerCase()}">${game.result}</td>
                     </tr>
@@ -269,7 +284,8 @@ function createOpportunityCard(opp, rank) {
     const statLabel = {
         'points': 'Points',
         'assists': 'Assists',
-        'rebounds': 'Rebounds'
+        'rebounds': 'Rebounds',
+        '3pt': '3-Points'  // ← NOUVEAU
     }[opp.stat_type];
 
     const teamName = getTeamName(opp.opponent);
@@ -277,13 +293,13 @@ function createOpportunityCard(opp, rank) {
     const betRangeLower = rec === 'OVER' ? line : ci.lower;
     const betRangeUpper = rec === 'OVER' ? ci.upper : line;
 
-    // ✅ NOUVEAUTÉ: SHAP EXPLANATIONS
+    // SHAP EXPLANATIONS
     const shapSection = opp.explanation && opp.explanation.contributions ? `
         <div style="margin-top: 15px; padding: 15px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 10px; color: white;">
             <strong style="font-size: 1.1em;">🔍 DÉCOMPOSITION SHAP - Pourquoi ${opp.prediction.toFixed(1)}?</strong>
             <div style="margin-top: 10px; padding: 10px; background: rgba(255,255,255,0.15); border-radius: 8px;">
                 <div style="font-size: 1em; margin-bottom: 12px; padding: 8px; background: rgba(255,255,255,0.2); border-radius: 6px;">
-                    <strong>📊 Base:</strong> ${opp.explanation.base_value.toFixed(1)} pts (moyenne saison)
+                    <strong>📊 Base:</strong> ${opp.explanation.base_value.toFixed(1)} (moyenne saison)
                 </div>
                 ${opp.explanation.contributions.slice(0, 8).map(c => {
                     const isPositive = c.contribution > 0;
@@ -291,7 +307,6 @@ function createOpportunityCard(opp, rank) {
                     const icon = isPositive ? '➕' : '➖';
                     const barWidth = Math.min(Math.abs(c.contribution) * 30, 100);
                     
-                    // Nom lisible
                     const featureName = c.feature
                         .replace('avg_pts_last_5', 'Moy. 5 derniers')
                         .replace('avg_ast_last_5', 'Moy. AST 5 derniers')
@@ -299,6 +314,8 @@ function createOpportunityCard(opp, rank) {
                         .replace('avg_pts_last_10', 'Moy. 10 derniers')
                         .replace('avg_ast_last_10', 'Moy. AST 10 derniers')
                         .replace('avg_reb_last_10', 'Moy. REB 10 derniers')
+                        .replace('avg_fg3m_last_5', 'Moy. 3PT 5 derniers')
+                        .replace('avg_fg3m_last_10', 'Moy. 3PT 10 derniers')
                         .replace('home', 'Domicile')
                         .replace('rest_days', 'Jours repos')
                         .replace('minutes_avg', 'Minutes moy.')
@@ -308,14 +325,15 @@ function createOpportunityCard(opp, rank) {
                         .replace('back_to_back', 'Back-to-back')
                         .replace('recent_trend_pts', 'Tendance PTS')
                         .replace('recent_trend_ast', 'Tendance AST')
-                        .replace('recent_trend_reb', 'Tendance REB');
+                        .replace('recent_trend_reb', 'Tendance REB')
+                        .replace('recent_trend_fg3m', 'Tendance 3PT');
                     
                     return `
                     <div style="margin: 10px 0;">
                         <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
                             <span style="font-size: 0.9em; opacity: 0.95; font-weight: 600;">${featureName}</span>
                             <span style="font-weight: 700; color: ${color}; font-size: 1em;">
-                                ${icon} ${Math.abs(c.contribution).toFixed(2)} pts
+                                ${icon} ${Math.abs(c.contribution).toFixed(2)}
                             </span>
                         </div>
                         <div style="background: rgba(255,255,255,0.25); height: 10px; border-radius: 5px; overflow: hidden;">
@@ -431,22 +449,4 @@ function createOpportunityCard(opp, rank) {
                         </thead>
                         <tbody>
                             ${probabilities.map(p => `
-                                <tr ${p.line === line ? 'style="background: #fef3c7; font-weight: bold;"' : ''}>
-                                    <td>${p.line.toFixed(1)}</td>
-                                    <td>${p.overProb}%</td>
-                                    <td>${p.underProb}%</td>
-                                </tr>
-                            `).join('')}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-    `;
-}
-
-function displayError(message) {
-    const errorDiv = document.getElementById('errorDiv');
-    errorDiv.textContent = message;
-    errorDiv.classList.remove('hidden');
-} 
+                                <tr ${p.line === line ? 'style="background: #fef3c7; font-weight: bold;"' : '
