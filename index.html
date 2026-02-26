@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Morning Brief - Paris NBA FIABLES</title>
+    <title>Paris NBA ULTRA-FIABLES - Render Payant</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
@@ -100,6 +100,8 @@
         .btn-points { background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); }
         .btn-assists { background: linear-gradient(135deg, #10b981 0%, #059669 100%); }
         .btn-rebounds { background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); }
+        .btn-3pt { background: linear-gradient(135deg, #f97316 0%, #ea580c 100%); }
+        
         .stats-bar {
             background: white;
             border-radius: 15px;
@@ -378,6 +380,17 @@
         }
         .info-banner strong { color: #1e3a8a; }
         
+        .render-badge {
+            display: inline-block;
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            color: white;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 0.8em;
+            font-weight: 700;
+            margin-left: 10px;
+        }
+        
         @media (max-width: 768px) {
             .btn-tracker {
                 position: static;
@@ -394,8 +407,8 @@
     <div class="container">
         <!-- Header avec bouton tracker -->
         <div class="header">
-            <h1>🎯 Paris NBA ULTRA-FIABLES</h1>
-            <p>Prédictions XGBoost - Test R² RÉEL (pas train!)</p>
+            <h1>🚀 Paris NBA ULTRA-FIABLES <span class="render-badge">50 PROPS</span></h1>
+            <p>Prédictions XGBoost - Test R² RÉEL + 4 types de stats</p>
         </div>
         
         <!-- BOUTON TRACKER FIXE -->
@@ -404,9 +417,11 @@
         </a>
 
         <div class="info-banner">
-            <strong>🎲 Nouveau: R² = TEST R² (VRAI performance!)</strong><br>
-            R² affiché = performance sur matchs FUTURS jamais vus.<br>
-            Clique sur le nom d'un joueur pour voir ses 10 derniers matchs.
+            <strong>🚀 Mode RENDER PAYANT activé!</strong><br>
+            • 50 props par scan (vs 18 gratuit)<br>
+            • 4 types de stats: Points, Assists, Rebounds, 3-Points<br>
+            • R² TEST = performance réelle sur matchs futurs<br>
+            • Clique sur un joueur pour voir ses 10 derniers matchs
         </div>
 
         <div class="filters">
@@ -432,13 +447,16 @@
             
             <div class="button-group">
                 <button class="btn-scan btn-points" onclick="scanOpportunities('points')">
-                    🏀 Scanner POINTS (5 props)
+                    🏀 Scanner POINTS (50 props)
                 </button>
                 <button class="btn-scan btn-assists" onclick="scanOpportunities('assists')">
-                    🎯 Scanner ASSISTS (5 props)
+                    🎯 Scanner ASSISTS (50 props)
                 </button>
                 <button class="btn-scan btn-rebounds" onclick="scanOpportunities('rebounds')">
-                    💪 Scanner REBOUNDS (5 props)
+                    💪 Scanner REBOUNDS (50 props)
+                </button>
+                <button class="btn-scan btn-3pt" onclick="scanOpportunities('3pt')">
+                    🎯 Scanner 3-POINTS (50 props)
                 </button>
             </div>
         </div>
@@ -465,7 +483,7 @@
         <div id="loadingDiv" class="loading hidden">
             <div class="spinner"></div>
             <h3>Scan en cours...</h3>
-            <p>Analyse de 5 props aléatoires (20-40 sec)</p>
+            <p>Analyse de 50 props aléatoires (60-90 sec)</p>
         </div>
 
         <div id="resultsDiv" class="opportunities-grid hidden"></div>
