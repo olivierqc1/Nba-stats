@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """
 NBA Betting Analyzer - API Backend avec XGBoost
-VERSION OPTIMISÉE: 3 endpoints séparés + 5 props + TEST R² + SHAP EXPLANATIONS
+VERSION RENDER PAYANT: 4 endpoints (PTS/AST/REB/3PT) + 50 props par type
 PARTIE 1/2
 """
 
@@ -53,8 +53,6 @@ model_manager = ModelManager() if XGBOOST_AVAILABLE else None
 def analyze_with_xgboost(player, opponent, is_home, stat_type, line):
     """
     Analyse avec XGBoost + SHAP explanations
-    
-    ✅ FIX v2: Inclut maintenant les SHAP explanations dans la réponse API
     """
     
     print(f"🤖 Analyse: {player} vs {opponent} ({stat_type})")
@@ -77,14 +75,19 @@ def analyze_with_xgboost(player, opponent, is_home, stat_type, line):
     
     prediction = prediction_result['prediction']
     confidence_interval = prediction_result['confidence_interval']
-    explanation = prediction_result.get('explanation')  # ← ✅ NOUVEAU: Récupère l'explication!
+    explanation = prediction_result.get('explanation')
     
     # 3. Analyse ligne
     line_analysis = analyze_betting_line(prediction, confidence_interval, line)
     
     # 4. Stats saison
     df = collector.get_complete_player_data(player)
-    stat_col = {'points': 'PTS', 'assists': 'AST', 'rebounds': 'REB'}[stat_type]
+    stat_col = {
+        'points': 'PTS',
+        'assists': 'AST',
+        'rebounds': 'REB',
+        '3pt': 'FG3M'  # ← NOUVEAU: 3-pointers made
+    }[stat_type]
     
     season_stats = {
         'games_played': len(df),
@@ -105,7 +108,7 @@ def analyze_with_xgboost(player, opponent, is_home, stat_type, line):
         r_squared = 0.50
         rmse = 5.0
     
-    # ✅ 6. CONSTRUIT LA RÉPONSE
+    # 6. CONSTRUIT LA RÉPONSE
     response = {
         'status': 'SUCCESS',
         'player': player,
@@ -124,7 +127,7 @@ def analyze_with_xgboost(player, opponent, is_home, stat_type, line):
         'data_source': 'NBA API + XGBoost'
     }
     
-    # ✅ 7. AJOUTE L'EXPLICATION SHAP SI DISPONIBLE (NOUVEAU!)
+    # 7. AJOUTE L'EXPLICATION SHAP SI DISPONIBLE
     if explanation is not None:
         response['explanation'] = explanation
         print(f"   ✅ SHAP explanation included ({len(explanation.get('contributions', []))} features)")
@@ -179,30 +182,37 @@ def analyze_betting_line(prediction, confidence_interval, line):
 
 
 # ============================================================================
-# ENDPOINTS PAR TYPE (POINTS, ASSISTS, REBOUNDS)
+# ENDPOINTS PAR TYPE (POINTS, ASSISTS, REBOUNDS, 3PT) - RENDER PAYANT
 # ============================================================================
 
 @app.route('/api/daily-opportunities-points', methods=['GET'])
 def daily_opportunities_points():
-    """Scan 5 opportunités POINTS aléatoires"""
-    return scan_opportunities_by_type('points', limit=10)
+    """Scan 50 opportunités POINTS (RENDER PAYANT)"""
+    return scan_opportunities_by_type('points', limit=50)
 
 
 @app.route('/api/daily-opportunities-assists', methods=['GET'])
 def daily_opportunities_assists():
-    """Scan 5 opportunités ASSISTS aléatoires"""
-    return scan_opportunities_by_type('assists', limit=18)
+    """Scan 50 opportunités ASSISTS (RENDER PAYANT)"""
+    return scan_opportunities_by_type('assists', limit=50)
 
 
 @app.route('/api/daily-opportunities-rebounds', methods=['GET'])
 def daily_opportunities_rebounds():
-    """Scan 5 opportunités REBOUNDS aléatoires"""
-    return scan_opportunities_by_type('rebounds', limit=18)
+    """Scan 50 opportunités REBOUNDS (RENDER PAYANT)"""
+    return scan_opportunities_by_type('rebounds', limit=50)
 
 
-def scan_opportunities_by_type(stat_type, limit=18):
+@app.route('/api/daily-opportunities-3pt', methods=['GET'])
+def daily_opportunities_3pt():
+    """Scan 50 opportunités 3-POINTS (RENDER PAYANT)"""
+    return scan_opportunities_by_type('3pt', limit=50)
+
+
+def scan_opportunities_by_type(stat_type, limit=50):
     """
     Scan opportunités pour UN type de stat avec randomisation
+    OPTIMISÉ POUR RENDER PAYANT (2 GB RAM, 120s timeout)
     """
     
     min_edge = request.args.get('min_edge', 5.0, type=float)
@@ -221,17 +231,27 @@ def scan_opportunities_by_type(stat_type, limit=18):
         }), 503
     
     print(f"\n{'='*70}")
-    print(f"🎲 SCANNING {stat_type.upper()} - {limit} PROPS (RANDOM)")
+    print(f"🚀 SCANNING {stat_type.upper()} - {limit} PROPS (RENDER PAYANT)")
     print(f"{'='*70}\n")
     
     try:
         # Récupère TOUTES les props
         all_props = odds_client.get_player_props(days=1)
         
+        # Map stat_type vers le type attendu par l'API
+        stat_type_map = {
+            'points': 'points',
+            'assists': 'assists',
+            'rebounds': 'rebounds',
+            '3pt': '3pt'  # ← NOUVEAU
+        }
+        
+        api_stat_type = stat_type_map.get(stat_type, stat_type)
+        
         # Filtre par 'stat_type'
         filtered_props = [
             p for p in all_props 
-            if p.get('stat_type') == stat_type
+            if p.get('stat_type') == api_stat_type
         ]
         
         print(f"📊 Total {stat_type} available: {len(filtered_props)}")
@@ -321,6 +341,7 @@ def scan_opportunities_by_type(stat_type, limit=18):
             'opportunities_found': len(opportunities),
             'scan_time': datetime.now().isoformat(),
             'model_type': 'XGBoost',
+            'render_tier': 'PAID',  # ← NOUVEAU: Indicateur
             'filters': {
                 'min_edge': min_edge,
                 'min_r2': min_r2
@@ -339,14 +360,6 @@ def scan_opportunities_by_type(stat_type, limit=18):
 
 
 # ============================================================================
-# FIN PARTIE 1/2
-# COLLE PARTIE 2 EN DESSOUS (player-history endpoint et autres)
-# ============================================================================
-# ============================================================================
-# PARTIE 2/2 - COLLER APRÈS PARTIE 1
-# ============================================================================
-
-# ============================================================================
 # PLAYER HISTORY ENDPOINT
 # ============================================================================
 
@@ -363,7 +376,6 @@ def get_player_history(player_name):
     try:
         print(f"📊 Fetching history for {player_name}")
         
-        # Récupère les données complètes
         df = collector.get_complete_player_data(player_name)
         
         if df is None or len(df) == 0:
@@ -372,13 +384,9 @@ def get_player_history(player_name):
                 'message': f'No data found for {player_name}'
             }), 404
         
-        # Trie par date (plus récent en premier)
         df = df.sort_values('GAME_DATE', ascending=False)
-        
-        # Prend les 10 derniers matchs
         recent_games = df.head(10)
         
-        # Prépare les données
         games = []
         for _, row in recent_games.iterrows():
             games.append({
@@ -388,21 +396,19 @@ def get_player_history(player_name):
                 'points': int(row['PTS']),
                 'assists': int(row['AST']),
                 'rebounds': int(row['REB']),
+                'three_pointers': int(row.get('FG3M', 0)),  # ← NOUVEAU
                 'minutes': int(row['MIN']),
                 'result': 'W' if row.get('WL', '') == 'W' else 'L'
             })
         
-        # Calcule les tendances
         pts_last_5 = df.head(5)['PTS'].mean()
         pts_prev_5 = df.iloc[5:10]['PTS'].mean() if len(df) >= 10 else df['PTS'].mean()
         pts_trend = pts_last_5 - pts_prev_5
         
-        # Form récente (W-L record)
         recent_wl = df.head(5)['WL'].value_counts().to_dict() if 'WL' in df.columns else {}
         wins = recent_wl.get('W', 0)
         losses = recent_wl.get('L', 0)
         
-        # Minutes trend
         min_last_5 = df.head(5)['MIN'].mean()
         min_stable = df.head(10)['MIN'].std() < 3
         
@@ -415,6 +421,7 @@ def get_player_history(player_name):
                 'avg_points': round(df['PTS'].mean(), 1),
                 'avg_assists': round(df['AST'].mean(), 1),
                 'avg_rebounds': round(df['REB'].mean(), 1),
+                'avg_3pt': round(df.get('FG3M', pd.Series([0])).mean(), 1),  # ← NOUVEAU
                 'avg_minutes': round(df['MIN'].mean(), 1)
             },
             'trends': {
@@ -436,62 +443,6 @@ def get_player_history(player_name):
 
 
 # ============================================================================
-# DEBUG ENDPOINT
-# ============================================================================
-
-@app.route('/api/debug-odds', methods=['GET'])
-def debug_odds():
-    """Debug complet de l'API Odds"""
-    
-    debug_info = {
-        'odds_api_available': ODDS_API_AVAILABLE,
-        'odds_client_exists': odds_client is not None,
-        'api_key_configured': bool(os.environ.get('ODDS_API_KEY')),
-        'api_key_length': len(os.environ.get('ODDS_API_KEY', '')) if os.environ.get('ODDS_API_KEY') else 0
-    }
-    
-    if not ODDS_API_AVAILABLE or not odds_client:
-        return jsonify({
-            'status': 'ERROR',
-            'message': 'Odds API not initialized',
-            'debug': debug_info
-        })
-    
-    try:
-        print("🔍 Testing Odds API...")
-        
-        raw_props = odds_client.get_player_props(days=1)
-        total_props = len(raw_props)
-        
-        stat_types = {}
-        for prop in raw_props:
-            st = prop.get('stat_type', 'unknown')
-            stat_types[st] = stat_types.get(st, 0) + 1
-        
-        sample_props = raw_props[:3] if raw_props else []
-        
-        return jsonify({
-            'status': 'SUCCESS',
-            'debug': debug_info,
-            'results': {
-                'total_props': total_props,
-                'stat_types_found': stat_types,
-                'sample_props': sample_props,
-                'first_prop_structure': raw_props[0] if raw_props else None
-            }
-        })
-    
-    except Exception as e:
-        import traceback
-        return jsonify({
-            'status': 'ERROR',
-            'message': str(e),
-            'traceback': traceback.format_exc(),
-            'debug': debug_info
-        })
-
-
-# ============================================================================
 # AUTRES ENDPOINTS
 # ============================================================================
 
@@ -502,6 +453,8 @@ def health_check():
         'status': 'OK',
         'xgboost_enabled': XGBOOST_AVAILABLE,
         'odds_api_enabled': ODDS_API_AVAILABLE,
+        'render_tier': 'PAID',
+        'max_props_per_scan': 50,
         'timestamp': datetime.now().isoformat()
     })
 
@@ -516,164 +469,6 @@ def get_odds_usage():
     return jsonify({'error': 'Odds API not available'}), 503
 
 
-@app.route('/api/test-model-quality', methods=['GET'])
-def test_model_quality():
-    """Teste R² sur joueurs stars"""
-    
-    if not XGBOOST_AVAILABLE:
-        return jsonify({'error': 'XGBoost not available'}), 503
-    
-    test_players = ['LeBron James', 'Stephen Curry', 'Giannis Antetokounmpo']
-    results = []
-    
-    for player in test_players:
-        for stat_type in ['points', 'assists', 'rebounds']:
-            try:
-                model = XGBoostNBAModel(stat_type=stat_type)
-                result = model.train(player, '2024-25', save_model=False)
-                
-                if result['status'] == 'SUCCESS':
-                    results.append({
-                        'player': player,
-                        'stat': stat_type,
-                        'test_r2': round(result['test_metrics']['r2'], 3),
-                        'train_r2': round(result['train_metrics']['r2'], 3),
-                        'predictability': round(result['predictability']['score'], 1)
-                    })
-                else:
-                    results.append({
-                        'player': player,
-                        'stat': stat_type,
-                        'status': result['status'],
-                        'message': result.get('message', 'Unknown')
-                    })
-            except Exception as e:
-                results.append({
-                    'player': player,
-                    'stat': stat_type,
-                    'error': str(e)
-                })
-    
-    return jsonify({'status': 'SUCCESS', 'results': results})
-
-
-@app.route('/api/model-diagnostics', methods=['GET'])
-def model_diagnostics():
-    """
-    Diagnostics complets du modèle:
-    - Feature importance
-    - Corrélations
-    - T-tests de significativité
-    """
-    
-    if not XGBOOST_AVAILABLE:
-        return jsonify({'error': 'XGBoost not available'}), 503
-    
-    player = request.args.get('player', 'LeBron James')
-    stat_type = request.args.get('stat_type', 'points')
-    
-    try:
-        print(f"\n📊 Diagnostics for {player} - {stat_type}")
-        
-        # Entraîne le modèle
-        model = XGBoostNBAModel(stat_type=stat_type)
-        result = model.train(player, '2024-25', save_model=False)
-        
-        if result['status'] != 'SUCCESS':
-            return jsonify({
-                'status': 'ERROR',
-                'message': result.get('message', 'Training failed')
-            }), 400
-        
-        # 1. Feature importance (XGBoost)
-        feature_importance = model.model.feature_importances_
-        feature_names = model.model.get_booster().feature_names
-        
-        if feature_names is None:
-            # Génère noms génériques
-            feature_names = [f'feature_{i}' for i in range(len(feature_importance))]
-        
-        # Trie par importance
-        importance_dict = dict(zip(feature_names, feature_importance))
-        sorted_features = sorted(importance_dict.items(), key=lambda x: x[1], reverse=True)
-        
-        top_features = [
-            {
-                'name': name,
-                'importance': round(float(imp), 4),
-                'importance_percent': round(float(imp) * 100, 2)
-            }
-            for name, imp in sorted_features[:20]  # Top 20
-        ]
-        
-        # 2. Statistiques du modèle
-        stats = model.training_stats
-        
-        # 3. Calcule les corrélations (approximation de significativité)
-        df = collector.get_complete_player_data(player)
-        stat_col = {'points': 'PTS', 'assists': 'AST', 'rebounds': 'REB'}[stat_type]
-        
-        features_df = collector.prepare_features_for_prediction(player, '', True)
-        
-        # Aligne
-        min_len = min(len(features_df), len(df))
-        features_df = features_df.iloc[:min_len]
-        target = df.sort_values('GAME_DATE', ascending=False).iloc[:min_len][stat_col]
-        
-        # Calcule corrélations
-        correlations = []
-        for col in features_df.columns:
-            try:
-                from scipy.stats import pearsonr
-                corr, p_value = pearsonr(features_df[col], target)
-                
-                # Calcule t-statistic
-                n = len(features_df)
-                t_stat = corr * np.sqrt(n - 2) / np.sqrt(1 - corr**2) if abs(corr) < 1 else 0
-                
-                correlations.append({
-                    'feature': col,
-                    'correlation': round(float(corr), 4),
-                    'p_value': round(float(p_value), 6),
-                    't_statistic': round(float(t_stat), 4),
-                    'significant': p_value < 0.05
-                })
-            except:
-                pass
-        
-        # Trie par corrélation absolue
-        correlations.sort(key=lambda x: abs(x['correlation']), reverse=True)
-        
-        return jsonify({
-            'status': 'SUCCESS',
-            'player': player,
-            'stat_type': stat_type,
-            'model_performance': {
-                'train_r2': round(stats['train_metrics']['r2'], 3),
-                'test_r2': round(stats['test_metrics']['r2'], 3),
-                'test_rmse': round(stats['test_metrics']['rmse'], 2),
-                'cv_r2_mean': round(stats['cv_results']['r2_mean'], 3)
-            },
-            'predictability': stats.get('predictability', {}),
-            'feature_importance': top_features,
-            'correlations': correlations[:20],  # Top 20
-            'data_info': {
-                'total_games': stats['data']['total_games'],
-                'clean_games': stats['data']['clean_games'],
-                'outliers_removed': stats['data']['outliers_removed']
-            }
-        })
-    
-    except Exception as e:
-        print(f"❌ Diagnostics error: {e}")
-        import traceback
-        traceback.print_exc()
-        return jsonify({
-            'status': 'ERROR',
-            'message': str(e)
-        }), 500
-
-
 # ============================================================================
 # MAIN
 # ============================================================================
@@ -683,10 +478,11 @@ if __name__ == '__main__':
     debug = os.environ.get('DEBUG', 'False').lower() == 'true'
     
     print("\n" + "="*70)
-    print("NBA BETTING ANALYZER - API BACKEND")
+    print("NBA BETTING ANALYZER - API BACKEND (RENDER PAYANT)")
     print("="*70)
     print(f"Mode: {'XGBoost ✅' if XGBOOST_AVAILABLE else '❌'}")
     print(f"Odds API: {'✅' if ODDS_API_AVAILABLE else '❌'}")
+    print(f"Render: PAID (50 props/scan)")
     print(f"Port: {port}")
     print("="*70 + "\n")
     
