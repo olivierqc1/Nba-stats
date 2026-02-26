@@ -22,7 +22,7 @@ except ImportError:
 # Import du collector v10
 import sys
 sys.path.insert(0, '/home/claude')
-from advanced_data_collector import AdvancedDataCollector
+from advanced_data_collector_v10 import AdvancedDataCollector
 
 
 class XGBoostNBAModel:
@@ -40,7 +40,8 @@ class XGBoostNBAModel:
         self.stat_map = {
             'points': 'PTS',
             'assists': 'AST',
-            'rebounds': 'REB'
+            'rebounds': 'REB',
+            '3pt': 'FG3M'  # ← NOUVEAU: 3-pointers made
         }
         self.target_column = self.stat_map.get(stat_type, 'PTS')
         self.collector = AdvancedDataCollector()
@@ -213,7 +214,16 @@ class XGBoostNBAModel:
         y = df[self.target_column].copy()
         
         # 10 VARIABLES OPTIMALES
-        trend_col = f'recent_trend_{self.target_column.lower()}'
+        if self.target_column == 'PTS':
+            trend_col = 'recent_trend_pts'
+        elif self.target_column == 'AST':
+            trend_col = 'recent_trend_ast'
+        elif self.target_column == 'REB':
+            trend_col = 'recent_trend_reb'
+        elif self.target_column == 'FG3M':  # ← NOUVEAU
+            trend_col = 'recent_trend_fg3m'
+        else:
+            trend_col = f'recent_trend_{self.target_column.lower()}'
         
         feature_cols = [
             f'avg_{self.target_column.lower()}_last_5',   # 1
