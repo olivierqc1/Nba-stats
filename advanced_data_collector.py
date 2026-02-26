@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-ADVANCED DATA COLLECTOR - VERSION 10 VARIABLES + 3PT
-Support complet: PTS, AST, REB, FG3M (3-pointers made)
+ADVANCED DATA COLLECTOR - VERSION 10 VARIABLES
+Objectif: Prédictions optimales avec features scientifiquement prouvées
 """
 
 import numpy as np
@@ -13,20 +13,33 @@ from nba_api.stats.static import players
 import time
 
 class AdvancedDataCollector:
-    """Collector avec 10 variables + support 3PT"""
+    """Collector avec 10 variables optimales"""
     
     def __init__(self):
         self.cache = {}
         
     def get_complete_player_data(self, player_name, season='2024-25'):
         """
-        Récupère données player avec 10 VARIABLES + 3PT
+        Récupère données player avec 10 VARIABLES OPTIMALES:
         
-        Stats collectées: PTS, AST, REB, FG3M (3-pointers made)
+        VARIABLES ACTUELLES (5):
+        1. avg_pts_last_5
+        2. avg_pts_last_10
+        3. home
+        4. rest_days
+        5. minutes_avg
+        
+        NOUVELLES VARIABLES (5):
+        6. opponent_def_rating
+        7. pace
+        8. usage_rate
+        9. back_to_back
+        10. recent_trend
         """
         try:
             print(f"\n📥 Collecting {player_name}...")
             
+            # 1. Récupère game logs
             player_id = self._get_player_id(player_name)
             if player_id is None:
                 print(f"❌ Player not found: {player_name}")
@@ -47,29 +60,28 @@ class AdvancedDataCollector:
             
             print(f"   📊 Raw games: {len(df)}")
             
-            # Colonnes essentielles + 3PT
+            # 2. Colonnes essentielles
             cols_needed = ['GAME_DATE', 'MATCHUP', 'MIN', 'PTS', 'AST', 'REB', 'FG3M']
-            
             available = [c for c in cols_needed if c in df.columns]
-            if len(available) < 5:
+            if len(available) < 4:
                 print(f"❌ Missing essential columns")
                 return None
             
             df = df[available].copy()
             
-            # Parse date
+            # 3. Parse date
             df['GAME_DATE'] = pd.to_datetime(df['GAME_DATE'], errors='coerce')
             df = df.dropna(subset=['GAME_DATE'])
             df = df.sort_values('GAME_DATE', ascending=False).reset_index(drop=True)
             
-            # Parse minutes
+            # 4. Parse minutes
             if 'MIN' in df.columns:
                 df['MIN'] = df['MIN'].fillna('0:00')
                 df['MIN'] = df['MIN'].apply(self._parse_minutes)
             else:
                 df['MIN'] = 30.0
             
-            # Fill NaN pour stats (y compris 3PT)
+            # 5. Fill NaN pour stats
             for col in ['PTS', 'AST', 'REB', 'FG3M']:
                 if col in df.columns:
                     df[col] = pd.to_numeric(df[col], errors='coerce')
@@ -77,68 +89,72 @@ class AdvancedDataCollector:
                 else:
                     df[col] = 0
             
-            # Home/Away
+            # 6. Home/Away
             if 'MATCHUP' in df.columns:
                 df['home'] = df['MATCHUP'].apply(lambda x: 1 if 'vs.' in str(x) else 0)
             else:
                 df['home'] = 0
             
-            # Rest days
+            # 7. Rest days
             df['rest_days'] = df['GAME_DATE'].diff(-1).dt.days.fillna(2)
             df['rest_days'] = df['rest_days'].clip(0, 7)
             
             # ============================================================
-            # FEATURES OPTIMALES (10 VARIABLES) + 3PT
+            # 8. FEATURES OPTIMALES (10 VARIABLES)
             # ============================================================
             
-            # Moyennes 5 derniers matchs
+            # VARIABLES 1-2: Moyennes 5 et 10 derniers matchs
             df['avg_pts_last_5'] = df['PTS'].shift(1).rolling(5, min_periods=1).mean()
             df['avg_ast_last_5'] = df['AST'].shift(1).rolling(5, min_periods=1).mean()
             df['avg_reb_last_5'] = df['REB'].shift(1).rolling(5, min_periods=1).mean()
-            df['avg_fg3m_last_5'] = df['FG3M'].shift(1).rolling(5, min_periods=1).mean()  # ← NOUVEAU
+            df['avg_fg3m_last_5'] = df['FG3M'].shift(1).rolling(5, min_periods=1).mean()
             
-            # Moyennes 10 derniers matchs
             df['avg_pts_last_10'] = df['PTS'].shift(1).rolling(10, min_periods=1).mean()
             df['avg_ast_last_10'] = df['AST'].shift(1).rolling(10, min_periods=1).mean()
             df['avg_reb_last_10'] = df['REB'].shift(1).rolling(10, min_periods=1).mean()
-            df['avg_fg3m_last_10'] = df['FG3M'].shift(1).rolling(10, min_periods=1).mean()  # ← NOUVEAU
+            df['avg_fg3m_last_10'] = df['FG3M'].shift(1).rolling(10, min_periods=1).mean()
             
-            # Minutes moyenne
+            # VARIABLE 5: Minutes moyennes
             df['minutes_avg'] = df['MIN'].shift(1).rolling(10, min_periods=1).mean()
             
-            # Opponent defensive rating (baseline)
+            # VARIABLE 6: Opponent defensive rating
+            # Approximation: on utilise une baseline NBA (110.0)
+            # Dans une version future, on pourrait fetch la vraie def rating
             df['opponent_def_rating'] = 110.0
             
-            # Pace (rythme de jeu)
+            # VARIABLE 7: Pace (rythme de jeu)
+            # Approximation: baseline NBA est ~100 possessions/48min
             df['pace'] = 100.0
             
-            # Usage rate
+            # VARIABLE 8: Usage rate
+            # Approximation: (PTS + AST + REB) * MIN / moyenne
             total_production = df['PTS'] + df['AST'] + df['REB']
             df['usage_rate'] = (total_production * df['MIN']) / total_production.mean()
             df['usage_rate'] = df['usage_rate'].fillna(df['usage_rate'].mean())
-            df['usage_rate'] = df['usage_rate'].clip(0, 200)
+            df['usage_rate'] = df['usage_rate'].clip(0, 200)  # Cap outliers
             
-            # Back-to-back
+            # VARIABLE 9: Back-to-back
             df['back_to_back'] = (df['rest_days'] == 0).astype(int)
             
-            # Recent trend (pente des 5 derniers)
+            # VARIABLE 10: Recent trend (pente des 5 derniers)
             df['recent_trend_pts'] = self._calculate_trend(df['PTS'], window=5)
             df['recent_trend_ast'] = self._calculate_trend(df['AST'], window=5)
             df['recent_trend_reb'] = self._calculate_trend(df['REB'], window=5)
-            df['recent_trend_fg3m'] = self._calculate_trend(df['FG3M'], window=5)  # ← NOUVEAU
+            df['recent_trend_fg3m'] = self._calculate_trend(df['FG3M'], window=5)
             
-            # Fill NaN final
+            # 9. Fill NaN final
             for col in df.columns:
                 if df[col].dtype in [np.float64, np.int64]:
                     df[col] = df[col].fillna(df[col].mean() if len(df[col].dropna()) > 0 else 0)
             
-            # Drop premiers matchs instables
+            # 10. Drop premiers matchs instables
             if len(df) > 15:
                 df = df[10:].reset_index(drop=True)
                 print(f"   🔧 Removed first 10 games (unstable features)")
             
             print(f"   ✅ Final: {len(df)} games, {len(df.columns)} features")
-            print(f"   📊 Stats: PTS, AST, REB, 3PT (FG3M)")
+            print(f"   📊 Variables: avg_L5, avg_L10, home, rest_days, minutes_avg,")
+            print(f"                opponent_def, pace, usage, b2b, trend")
             
             if len(df) < 15:
                 print(f"   ⚠️  Only {len(df)} games - might be insufficient")
@@ -152,10 +168,16 @@ class AdvancedDataCollector:
             return None
     
     def _calculate_trend(self, series, window=5):
-        """Calcule la pente (trend) des N derniers matchs"""
+        """
+        Calcule la pente (trend) des N derniers matchs
+        
+        Positif = performance en hausse
+        Négatif = performance en baisse
+        """
         def linear_slope(x):
             if len(x) < 2:
                 return 0
+            # Régression linéaire simple
             indices = np.arange(len(x))
             slope = np.polyfit(indices, x, 1)[0]
             return slope
@@ -210,9 +232,7 @@ class AdvancedDataCollector:
             
             features = df.iloc[0:1].copy()
             features = features.select_dtypes(include=[np.number])
-            
-            # Drop les stats cibles
-            features = features.drop(columns=['PTS', 'AST', 'REB', 'FG3M'], errors='ignore')
+            features = features.drop(columns=['PTS', 'AST', 'REB'], errors='ignore')
             
             return features
         
@@ -225,10 +245,10 @@ if __name__ == "__main__":
     collector = AdvancedDataCollector()
     
     print("\n" + "="*70)
-    print("TEST: 10 VARIABLES + 3PT SUPPORT")
+    print("TEST: 10 VARIABLES OPTIMALES")
     print("="*70)
     
-    df = collector.get_complete_player_data("Stephen Curry", "2024-25")
+    df = collector.get_complete_player_data("LeBron James", "2024-25")
     
     if df is not None:
         print("\n✅ SUCCÈS!")
@@ -237,7 +257,7 @@ if __name__ == "__main__":
         for i, col in enumerate(df.columns, 1):
             print(f"  {i}. {col}")
         
-        print(f"\nPremières lignes (aperçu stats 3PT):")
-        print(df[['PTS', 'FG3M', 'avg_fg3m_last_5', 'avg_fg3m_last_10']].head())
+        print(f"\nPremières lignes (aperçu):")
+        print(df[['PTS', 'avg_pts_last_5', 'avg_pts_last_10', 'home', 'back_to_back', 'recent_trend_pts']].head())
     else:
         print("\n❌ ÉCHEC")
