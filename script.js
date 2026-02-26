@@ -449,4 +449,4 @@ function createOpportunityCard(opp, rank) {
                         </thead>
                         <tbody>
                             ${probabilities.map(p => `
-                                <tr ${p.line === line ? 'style="background: #fef3c7; font-weight: bold;"' : ' 
+                                <tr ${p.line === line ? 'style="background: #fef3c7; font-weight: bold;"' : '
