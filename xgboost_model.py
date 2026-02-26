@@ -41,7 +41,7 @@ class XGBoostNBAModel:
             'points': 'PTS',
             'assists': 'AST',
             'rebounds': 'REB',
-            '3pt': 'FG3M'  # ← NOUVEAU: 3-pointers made
+            '3pt': 'FG3M'
         }
         self.target_column = self.stat_map.get(stat_type, 'PTS')
         self.collector = AdvancedDataCollector()
@@ -214,16 +214,7 @@ class XGBoostNBAModel:
         y = df[self.target_column].copy()
         
         # 10 VARIABLES OPTIMALES
-        if self.target_column == 'PTS':
-            trend_col = 'recent_trend_pts'
-        elif self.target_column == 'AST':
-            trend_col = 'recent_trend_ast'
-        elif self.target_column == 'REB':
-            trend_col = 'recent_trend_reb'
-        elif self.target_column == 'FG3M':  # ← NOUVEAU
-            trend_col = 'recent_trend_fg3m'
-        else:
-            trend_col = f'recent_trend_{self.target_column.lower()}'
+        trend_col = f'recent_trend_{self.target_column.lower()}'
         
         feature_cols = [
             f'avg_{self.target_column.lower()}_last_5',   # 1
