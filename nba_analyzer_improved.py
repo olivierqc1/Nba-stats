@@ -187,32 +187,33 @@ def analyze_betting_line(prediction, confidence_interval, line):
 
 @app.route('/api/daily-opportunities-points', methods=['GET'])
 def daily_opportunities_points():
-    """Scan 50 opportunités POINTS (RENDER PAYANT)"""
-    return scan_opportunities_by_type('points', limit=50)
+    """Scan 30 opportunités POINTS (RENDER PAYANT - optimisé timeout)"""
+    return scan_opportunities_by_type('points', limit=30)
 
 
 @app.route('/api/daily-opportunities-assists', methods=['GET'])
 def daily_opportunities_assists():
-    """Scan 50 opportunités ASSISTS (RENDER PAYANT)"""
-    return scan_opportunities_by_type('assists', limit=50)
+    """Scan 30 opportunités ASSISTS (RENDER PAYANT - optimisé timeout)"""
+    return scan_opportunities_by_type('assists', limit=30)
 
 
 @app.route('/api/daily-opportunities-rebounds', methods=['GET'])
 def daily_opportunities_rebounds():
-    """Scan 50 opportunités REBOUNDS (RENDER PAYANT)"""
-    return scan_opportunities_by_type('rebounds', limit=50)
+    """Scan 30 opportunités REBOUNDS (RENDER PAYANT - optimisé timeout)"""
+    return scan_opportunities_by_type('rebounds', limit=30)
 
 
 @app.route('/api/daily-opportunities-3pt', methods=['GET'])
 def daily_opportunities_3pt():
-    """Scan 50 opportunités 3-POINTS (RENDER PAYANT)"""
-    return scan_opportunities_by_type('3pt', limit=50)
+    """Scan 30 opportunités 3-POINTS (RENDER PAYANT - optimisé timeout)"""
+    return scan_opportunities_by_type('3pt', limit=30)
 
 
-def scan_opportunities_by_type(stat_type, limit=50):
+def scan_opportunities_by_type(stat_type, limit=30):
     """
     Scan opportunités pour UN type de stat avec randomisation
     OPTIMISÉ POUR RENDER PAYANT (2 GB RAM, 120s timeout)
+    Default: 30 props pour rester sous 120s
     """
     
     min_edge = request.args.get('min_edge', 5.0, type=float)
