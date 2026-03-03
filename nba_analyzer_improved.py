@@ -183,13 +183,19 @@ def scan_by_type(stat_type, limit=25):
                 analyzed_count += 1
                 if result.get('status') != 'SUCCESS':
                     continue
-                r2      = result['regression_stats']['r_squared']
-                overfit = result['regression_stats']['overfit_gap']
-                edge    = result['line_analysis']['edge']
-                rec     = result['line_analysis']['recommendation']
-                lv      = abs(result['line_analysis'].get('line_value_score', 0))
-                if rec == 'SKIP' or edge < min_edge or r2 < min_r2 or overfit > 0.35 or lv < min_line_value:
+                r2         = result['regression_stats']['r_squared']
+                overfit    = result['regression_stats']['overfit_gap']
+                rmse       = result['regression_stats']['rmse']
+                edge       = result['line_analysis']['edge']
+                rec        = result['line_analysis']['recommendation']
+                lv         = abs(result['line_analysis'].get('line_value_score', 0))
+                rmse_ratio = (rmse / line) if line and line > 0 else 1.0
+
+                # Filtre RMSE/ligne > 40%: modele trop imprécis pour ce joueur/ligne
+                if rec == 'SKIP' or edge < min_edge or r2 < min_r2 or overfit > 0.35 or lv < min_line_value or rmse_ratio > 0.40:
                     continue
+
+                result['regression_stats']['rmse_ratio'] = round(rmse_ratio, 2)
                 result['game_info']      = {'date': prop.get('date',''), 'home_team': prop.get('home_team',''), 'away_team': prop.get('away_team','')}
                 result['bookmaker_info'] = {'bookmaker': prop.get('bookmaker','Unknown'), 'line': line, 'over_odds': prop.get('over_odds',-110), 'under_odds': prop.get('under_odds',-110)}
                 opportunities.append(result)
