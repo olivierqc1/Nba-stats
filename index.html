@@ -3,425 +3,115 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Paris NBA ULTRA-FIABLES - Render Payant</title>
+    <title>Paris NBA ULTRA-FIABLES</title>
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            padding: 20px;
-        }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; padding: 20px; }
         .container { max-width: 1400px; margin: 0 auto; }
-        .header {
-            background: white;
-            border-radius: 20px;
-            padding: 30px;
-            margin-bottom: 20px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-            position: relative;
-        }
-        .header h1 {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            font-size: 2.5em;
-            margin-bottom: 5px;
-        }
+        .header { background: white; border-radius: 20px; padding: 30px; margin-bottom: 20px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); position: relative; }
+        .header h1 { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-size: 2.5em; margin-bottom: 5px; }
         .header p { color: #666; font-size: 1.1em; }
-        
-        /* BOUTON TRACKER */
-        .btn-tracker {
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-            color: white;
-            padding: 12px 24px;
-            border-radius: 25px;
-            text-decoration: none;
-            font-weight: 600;
-            box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);
-            z-index: 1000;
-            transition: all 0.3s;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-        .btn-tracker:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4);
-        }
-        
-        .filters {
-            background: white;
-            border-radius: 15px;
-            padding: 20px;
-            margin-bottom: 20px;
-            box-shadow: 0 8px 20px rgba(0,0,0,0.15);
-        }
-        .filter-row {
-            display: flex;
-            gap: 20px;
-            align-items: center;
-            flex-wrap: wrap;
-            margin-bottom: 20px;
-        }
+        .btn-tracker { position: fixed; top: 20px; right: 20px; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; padding: 12px 24px; border-radius: 25px; text-decoration: none; font-weight: 600; box-shadow: 0 4px 15px rgba(16,185,129,0.3); z-index: 1000; transition: all 0.3s; display: flex; align-items: center; gap: 8px; }
+        .btn-tracker:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(16,185,129,0.4); }
+        .btn-backtest { position: fixed; top: 75px; right: 20px; background: linear-gradient(135deg, #7c3aed 0%, #4f46e5 100%); color: white; padding: 12px 24px; border-radius: 25px; text-decoration: none; font-weight: 600; box-shadow: 0 4px 15px rgba(124,58,237,0.3); z-index: 1000; transition: all 0.3s; display: flex; align-items: center; gap: 8px; }
+        .btn-backtest:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(124,58,237,0.4); }
+        .filters { background: white; border-radius: 15px; padding: 20px; margin-bottom: 20px; box-shadow: 0 8px 20px rgba(0,0,0,0.15); }
+        .filter-row { display: flex; gap: 20px; align-items: center; flex-wrap: wrap; margin-bottom: 20px; }
         .filter-group { display: flex; align-items: center; gap: 10px; }
         .filter-group label { font-weight: 600; color: #333; }
-        .filter-group input, .filter-group select {
-            padding: 8px 15px;
-            border: 2px solid #e0e0e0;
-            border-radius: 8px;
-        }
-        .button-group {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
-        }
-        .btn-scan {
-            padding: 15px 25px;
-            color: white;
-            border: none;
-            border-radius: 10px;
-            font-weight: 700;
-            cursor: pointer;
-            font-size: 1.05em;
-            transition: all 0.3s;
-        }
-        .btn-scan:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 20px rgba(0,0,0,0.3);
-        }
-        .btn-scan:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-        }
+        .filter-group input, .filter-group select { padding: 8px 15px; border: 2px solid #e0e0e0; border-radius: 8px; }
+        .button-group { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; }
+        .btn-scan { padding: 15px 25px; color: white; border: none; border-radius: 10px; font-weight: 700; cursor: pointer; font-size: 1.05em; transition: all 0.3s; }
+        .btn-scan:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(0,0,0,0.3); }
+        .btn-scan:disabled { opacity: 0.5; cursor: not-allowed; }
         .btn-points { background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); }
         .btn-assists { background: linear-gradient(135deg, #10b981 0%, #059669 100%); }
         .btn-rebounds { background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); }
         .btn-3pt { background: linear-gradient(135deg, #f97316 0%, #ea580c 100%); }
-        
-        .stats-bar {
-            background: white;
-            border-radius: 15px;
-            padding: 20px;
-            margin-bottom: 20px;
-            box-shadow: 0 8px 20px rgba(0,0,0,0.15);
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-            gap: 15px;
-        }
+        .stats-bar { background: white; border-radius: 15px; padding: 20px; margin-bottom: 20px; box-shadow: 0 8px 20px rgba(0,0,0,0.15); display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px; }
         .stat-box { text-align: center; padding: 15px; border-radius: 10px; background: #f8f9fa; }
         .stat-label { font-size: 0.85em; color: #666; margin-bottom: 5px; }
         .stat-value { font-size: 2em; font-weight: 800; color: #667eea; }
         .opportunities-grid { display: grid; gap: 20px; }
-        .opp-card {
-            background: white;
-            border-radius: 15px;
-            padding: 25px;
-            box-shadow: 0 8px 20px rgba(0,0,0,0.15);
-            border-left: 6px solid #10b981;
-            position: relative;
-        }
+        .opp-card { background: white; border-radius: 15px; padding: 25px; box-shadow: 0 8px 20px rgba(0,0,0,0.15); border-left: 6px solid #10b981; position: relative; }
         .opp-card.under { border-left-color: #ef4444; }
-        .opp-card::before {
-            content: attr(data-rank);
-            position: absolute;
-            top: 15px;
-            right: 15px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            width: 40px;
-            height: 40px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-weight: 800;
-            font-size: 1.2em;
-        }
+        .opp-card::before { content: attr(data-rank); position: absolute; top: 15px; right: 15px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 1.2em; }
         .opp-header { margin-bottom: 20px; }
-        .opp-player { 
-            font-size: 1.8em; 
-            font-weight: 800; 
-            color: #667eea; 
-            margin-bottom: 5px;
-            cursor: pointer;
-            text-decoration: underline;
-            transition: color 0.3s;
-        }
+        .opp-player { font-size: 1.8em; font-weight: 800; color: #667eea; margin-bottom: 5px; cursor: pointer; text-decoration: underline; transition: color 0.3s; }
         .opp-player:hover { color: #764ba2; }
         .opp-matchup { color: #666; font-size: 1.1em; margin-bottom: 10px; }
-        .opp-badge {
-            display: inline-block;
-            padding: 8px 20px;
-            border-radius: 20px;
-            font-weight: 700;
-            font-size: 1em;
-            margin-top: 10px;
-        }
+        .opp-badge { display: inline-block; padding: 8px 20px; border-radius: 20px; font-weight: 700; font-size: 1em; margin-top: 10px; }
         .opp-badge.over { background: #d1fae5; color: #065f46; }
         .opp-badge.under { background: #fee2e2; color: #991b1b; }
-        .prediction-box {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            padding: 25px;
-            border-radius: 12px;
-            margin-bottom: 20px;
-            color: white;
-        }
-        .pred-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-        }
+        .prediction-box { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); padding: 25px; border-radius: 12px; margin-bottom: 20px; color: white; }
+        .pred-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
         .pred-label { font-size: 1em; opacity: 0.9; }
         .pred-value { font-size: 3em; font-weight: 800; }
-        .confidence-interval {
-            background: rgba(255,255,255,0.15);
-            padding: 15px;
-            border-radius: 8px;
-            margin-top: 15px;
-            text-align: center;
-        }
+        .confidence-interval { background: rgba(255,255,255,0.15); padding: 15px; border-radius: 8px; margin-top: 15px; text-align: center; }
         .confidence-interval-label { font-size: 0.9em; opacity: 0.9; margin-bottom: 8px; }
         .confidence-interval-range { font-size: 1.3em; font-weight: 700; }
-        .metrics-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-            gap: 12px;
-        }
-        .metric {
-            background: rgba(255,255,255,0.2);
-            padding: 15px;
-            border-radius: 8px;
-            text-align: center;
-        }
+        .metrics-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
+        .metric { background: rgba(255,255,255,0.2); padding: 15px; border-radius: 8px; text-align: center; }
         .metric-label { font-size: 0.85em; opacity: 0.9; margin-bottom: 5px; }
         .metric-value { font-size: 1.5em; font-weight: 700; }
-        .action-box {
-            background: #10b981;
-            padding: 20px;
-            border-radius: 12px;
-            color: white;
-            margin-top: 20px;
-        }
+        .action-box { background: #10b981; padding: 20px; border-radius: 12px; color: white; margin-top: 20px; }
         .action-box.under { background: #ef4444; }
         .action-title { font-size: 1.2em; font-weight: 700; margin-bottom: 10px; }
         .action-detail { font-size: 1.1em; }
-        .technical-details {
-            background: #f8f9fa;
-            border-radius: 12px;
-            padding: 20px;
-            margin-top: 20px;
-        }
-        .technical-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            cursor: pointer;
-            margin-bottom: 15px;
-        }
+        .technical-details { background: #f8f9fa; border-radius: 12px; padding: 20px; margin-top: 20px; }
+        .technical-header { display: flex; justify-content: space-between; align-items: center; cursor: pointer; margin-bottom: 15px; }
         .technical-title { font-size: 1.1em; font-weight: 700; color: #333; }
-        .toggle-icon {
-            font-size: 1.5em;
-            color: #667eea;
-            transition: transform 0.3s;
-        }
+        .toggle-icon { font-size: 1.5em; color: #667eea; transition: transform 0.3s; }
         .toggle-icon.open { transform: rotate(180deg); }
         .technical-content { display: none; }
         .technical-content.open { display: block; }
-        .prob-table {
-            width: 100%;
-            margin-top: 15px;
-            border-collapse: collapse;
-        }
-        .prob-table th {
-            background: #667eea;
-            color: white;
-            padding: 10px;
-            text-align: center;
-        }
-        .prob-table td {
-            padding: 10px;
-            text-align: center;
-            border-bottom: 1px solid #e0e0e0;
-        }
+        .prob-table { width: 100%; margin-top: 15px; border-collapse: collapse; }
+        .prob-table th { background: #667eea; color: white; padding: 10px; text-align: center; }
+        .prob-table td { padding: 10px; text-align: center; border-bottom: 1px solid #e0e0e0; }
         .prob-table tr:hover { background: #f0f0f0; }
-        .bet-range {
-            background: #dbeafe;
-            border: 2px solid #3b82f6;
-            padding: 15px;
-            border-radius: 8px;
-            margin-top: 15px;
-        }
+        .bet-range { background: #dbeafe; border: 2px solid #3b82f6; padding: 15px; border-radius: 8px; margin-top: 15px; }
         .bet-range-title { font-weight: 700; color: #1e40af; margin-bottom: 8px; }
         .bet-range-value { font-size: 1.3em; color: #1e3a8a; font-weight: 700; }
-        .modal {
-            display: none;
-            position: fixed;
-            z-index: 1000;
-            left: 0;
-            top: 0;
-            width: 100%;
-            height: 100%;
-            background: rgba(0,0,0,0.7);
-            animation: fadeIn 0.3s;
-        }
-        .modal.open {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        .modal-content {
-            background: white;
-            border-radius: 20px;
-            padding: 30px;
-            max-width: 800px;
-            width: 90%;
-            max-height: 90vh;
-            overflow-y: auto;
-            animation: slideIn 0.3s;
-        }
+        .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.7); animation: fadeIn 0.3s; }
+        .modal.open { display: flex; align-items: center; justify-content: center; }
+        .modal-content { background: white; border-radius: 20px; padding: 30px; max-width: 800px; width: 90%; max-height: 90vh; overflow-y: auto; animation: slideIn 0.3s; }
         @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
         @keyframes slideIn { from { transform: translateY(-50px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
-        .modal-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            margin-bottom: 20px;
-            padding-bottom: 15px;
-            border-bottom: 3px solid #667eea;
-        }
+        .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 3px solid #667eea; }
         .modal-title { font-size: 1.8em; font-weight: 800; color: #333; }
-        .modal-close {
-            font-size: 2em;
-            cursor: pointer;
-            color: #999;
-            transition: color 0.3s;
-        }
+        .modal-close { font-size: 2em; cursor: pointer; color: #999; transition: color 0.3s; }
         .modal-close:hover { color: #ef4444; }
-        .stats-summary {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-            gap: 15px;
-            margin-bottom: 25px;
-        }
-        .stat-card {
-            background: #f8f9fa;
-            padding: 15px;
-            border-radius: 10px;
-            text-align: center;
-        }
-        .stat-card-label { font-size: 0.85em; color: #666; margin-bottom: 5px; }
-        .stat-card-value { font-size: 1.8em; font-weight: 800; color: #667eea; }
-        .trend-box {
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            padding: 15px;
-            border-radius: 10px;
-            margin-bottom: 20px;
-        }
-        .trend-box strong { font-size: 1.1em; }
-        .games-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 20px;
-        }
-        .games-table th {
-            background: #667eea;
-            color: white;
-            padding: 12px;
-            text-align: left;
-            font-size: 0.9em;
-        }
-        .games-table td {
-            padding: 12px;
-            border-bottom: 1px solid #e0e0e0;
-            font-size: 0.95em;
-        }
-        .games-table tr:hover { background: #f8f9fa; }
-        .result-w { color: #10b981; font-weight: 700; }
-        .result-l { color: #ef4444; font-weight: 700; }
-        .loading {
-            text-align: center;
-            padding: 60px;
-            background: white;
-            border-radius: 15px;
-            box-shadow: 0 8px 20px rgba(0,0,0,0.15);
-        }
-        .spinner {
-            border: 5px solid #f3f3f3;
-            border-top: 5px solid #667eea;
-            border-radius: 50%;
-            width: 60px;
-            height: 60px;
-            animation: spin 1s linear infinite;
-            margin: 0 auto 20px;
-        }
+        .loading { text-align: center; padding: 60px; background: white; border-radius: 15px; box-shadow: 0 8px 20px rgba(0,0,0,0.15); }
+        .spinner { border: 5px solid #f3f3f3; border-top: 5px solid #667eea; border-radius: 50%; width: 60px; height: 60px; animation: spin 1s linear infinite; margin: 0 auto 20px; }
         @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         .hidden { display: none; }
-        .error {
-            background: #fee2e2;
-            border: 3px solid #fca5a5;
-            color: #991b1b;
-            padding: 25px;
-            border-radius: 15px;
-            text-align: center;
-        }
-        .info-banner {
-            background: #dbeafe;
-            border: 2px solid #3b82f6;
-            padding: 20px;
-            border-radius: 12px;
-            margin-bottom: 20px;
-            color: #1e40af;
-        }
+        .error { background: #fee2e2; border: 3px solid #fca5a5; color: #991b1b; padding: 25px; border-radius: 15px; text-align: center; }
+        .info-banner { background: #dbeafe; border: 2px solid #3b82f6; padding: 20px; border-radius: 12px; margin-bottom: 20px; color: #1e40af; }
         .info-banner strong { color: #1e3a8a; }
-        
-        .render-badge {
-            display: inline-block;
-            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
-            color: white;
-            padding: 6px 12px;
-            border-radius: 20px;
-            font-size: 0.8em;
-            font-weight: 700;
-            margin-left: 10px;
-        }
-        
+        .render-badge { display: inline-block; background: linear-gradient(135deg, #10b981 0%, #059669 100%); color: white; padding: 6px 12px; border-radius: 20px; font-size: 0.8em; font-weight: 700; margin-left: 10px; }
         @media (max-width: 768px) {
-            .btn-tracker {
-                position: static;
-                margin: 10px auto;
-                display: inline-flex;
-            }
-            .header {
-                text-align: center;
-            }
+            .btn-tracker, .btn-backtest { position: static; margin: 5px auto; display: inline-flex; }
+            .header { text-align: center; }
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <!-- Header avec bouton tracker -->
         <div class="header">
             <h1>🚀 Paris NBA ULTRA-FIABLES <span class="render-badge">30 PROPS</span></h1>
             <p>Prédictions XGBoost - Test R² RÉEL + 4 types de stats</p>
         </div>
-        
-        <!-- BOUTON TRACKER FIXE -->
-        <a href="bet-tracker.html" class="btn-tracker">
-            📊 Mes Paris
-        </a>
+
+        <a href="bet-tracker.html" class="btn-tracker">📊 Mes Paris</a>
+        <a href="backtest.html" class="btn-backtest">🔬 Backtest</a>
 
         <div class="info-banner">
             <strong>🚀 Mode RENDER PAYANT activé!</strong><br>
             • 30 props par scan (optimisé pour 120s timeout)<br>
             • 4 types de stats: Points, Assists, Rebounds, 3-Points<br>
             • R² TEST = performance réelle sur matchs futurs<br>
-            • Clique sur un joueur pour voir ses 10 derniers matchs
+            • Clique sur un joueur pour voir ses 10 derniers matchs<br>
+            • <strong>NOUVEAU 🔬 Backtest</strong> — valide le modèle sur 2023-24 sans risquer d'argent
         </div>
 
         <div class="filters">
@@ -444,40 +134,19 @@
                     <span>%</span>
                 </div>
             </div>
-            
             <div class="button-group">
-                <button class="btn-scan btn-points" onclick="scanOpportunities('points')">
-                    🏀 Scanner POINTS (30 props)
-                </button>
-                <button class="btn-scan btn-assists" onclick="scanOpportunities('assists')">
-                    🎯 Scanner ASSISTS (30 props)
-                </button>
-                <button class="btn-scan btn-rebounds" onclick="scanOpportunities('rebounds')">
-                    💪 Scanner REBOUNDS (30 props)
-                </button>
-                <button class="btn-scan btn-3pt" onclick="scanOpportunities('3pt')">
-                    🎯 Scanner 3-POINTS (30 props)
-                </button>
+                <button class="btn-scan btn-points" onclick="scanOpportunities('points')">🏀 Scanner POINTS (30 props)</button>
+                <button class="btn-scan btn-assists" onclick="scanOpportunities('assists')">🎯 Scanner ASSISTS (30 props)</button>
+                <button class="btn-scan btn-rebounds" onclick="scanOpportunities('rebounds')">💪 Scanner REBOUNDS (30 props)</button>
+                <button class="btn-scan btn-3pt" onclick="scanOpportunities('3pt')">🎯 Scanner 3-POINTS (30 props)</button>
             </div>
         </div>
 
         <div id="statsBar" class="stats-bar hidden">
-            <div class="stat-box">
-                <div class="stat-label">Type analysé</div>
-                <div class="stat-value" id="statType">-</div>
-            </div>
-            <div class="stat-box">
-                <div class="stat-label">Props scannées</div>
-                <div class="stat-value" id="analyzedProps">-</div>
-            </div>
-            <div class="stat-box">
-                <div class="stat-label">Opportunités trouvées</div>
-                <div class="stat-value" id="foundOpps">-</div>
-            </div>
-            <div class="stat-box">
-                <div class="stat-label">R² TEST moyen</div>
-                <div class="stat-value" id="avgR2">-</div>
-            </div>
+            <div class="stat-box"><div class="stat-label">Type analysé</div><div class="stat-value" id="statType">-</div></div>
+            <div class="stat-box"><div class="stat-label">Props scannées</div><div class="stat-value" id="analyzedProps">-</div></div>
+            <div class="stat-box"><div class="stat-label">Opportunités trouvées</div><div class="stat-value" id="foundOpps">-</div></div>
+            <div class="stat-box"><div class="stat-label">R² TEST moyen</div><div class="stat-value" id="avgR2">-</div></div>
         </div>
 
         <div id="loadingDiv" class="loading hidden">
@@ -496,9 +165,7 @@
                 <div class="modal-title" id="modalPlayerName">-</div>
                 <div class="modal-close" onclick="closePlayerModal()">&times;</div>
             </div>
-            <div id="modalContent">
-                <div class="spinner"></div>
-            </div>
+            <div id="modalContent"><div class="spinner"></div></div>
         </div>
     </div>
 
