@@ -1,110 +1,159 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-ADVANCED DATA COLLECTOR - VERSION CORRIGÉE
-Corrections:
-1. opponent_def_rating RÉEL (via LeagueDashTeamStats)
-2. pace RÉEL (via LeagueDashTeamStats)
-3. FG3M support conservé
+ADVANCED DATA COLLECTOR v3
+- Nouvelles features: over_rate, momentum, exp_avg, line_value
+- Filtre matchs hors normes (< 20 min, outliers statistiques)
+- Winsorisation des valeurs extremes
 """
 
 import numpy as np
 import pandas as pd
-from datetime import datetime
-from nba_api.stats.endpoints import playergamelog, leaguedashteamstats, teamgamelog
+from nba_api.stats.endpoints import playergamelog, leaguedashteamstats
 from nba_api.stats.static import players, teams
 import time
 
-class AdvancedDataCollector:
-    
-    def __init__(self):
-        self.cache = {}
-        self._team_stats_cache = {}  # Cache pour éviter appels répétés
 
-    # =========================================================================
-    # NOUVEAU: Récupère les vraies stats défensives et pace de chaque équipe
-    # =========================================================================
+class AdvancedDataCollector:
+
+    def __init__(self):
+        self.cache             = {}
+        self._team_stats_cache = {}
+
+    # ------------------------------------------------------------------
+    # TEAM DEFENSIVE STATS
+    # ------------------------------------------------------------------
 
     def get_team_defensive_stats(self, season='2024-25'):
-        """
-        Récupère defensive rating et pace pour toutes les équipes NBA.
-        Retourne un dict: { 'BOS': {'def_rating': 108.2, 'pace': 98.1}, ... }
-        """
-        cache_key = f'team_stats_{season}'
-        if cache_key in self._team_stats_cache:
-            return self._team_stats_cache[cache_key]
-
+        key = f'team_stats_{season}'
+        if key in self._team_stats_cache:
+            return self._team_stats_cache[key]
         try:
-            print("   📡 Fetching real team defensive stats...")
-
+            print("   Fetching team defensive stats...")
             stats = leaguedashteamstats.LeagueDashTeamStats(
                 season=season,
                 measure_type_simple_defense='Advanced',
                 per_mode_simple='PerGame'
             )
             time.sleep(0.6)
-
-            df = stats.get_data_frames()[0]
-
-            # Colonnes disponibles: TEAM_ID, TEAM_NAME, DEF_RATING, PACE, etc.
+            df     = stats.get_data_frames()[0]
             result = {}
+            all_t  = teams.get_teams()
             for _, row in df.iterrows():
-                team_name = row['TEAM_NAME']
-
-                # Trouve l'abréviation
-                all_teams = teams.get_teams()
-                team_match = [t for t in all_teams if t['full_name'] == team_name]
-                abbr = team_match[0]['abbreviation'] if team_match else team_name[:3].upper()
-
+                match = [t for t in all_t if t['full_name'] == row['TEAM_NAME']]
+                abbr  = match[0]['abbreviation'] if match else row['TEAM_NAME'][:3].upper()
                 result[abbr] = {
                     'def_rating': float(row.get('DEF_RATING', 112.0)),
-                    'pace': float(row.get('PACE', 99.0))
+                    'pace':       float(row.get('PACE',       99.0))
                 }
-
-            print(f"   ✅ Team stats loaded for {len(result)} teams")
-            self._team_stats_cache[cache_key] = result
+            self._team_stats_cache[key] = result
             return result
-
         except Exception as e:
-            print(f"   ⚠️  Could not fetch team stats: {e} — using league averages")
-            # Fallback: moyennes de la ligue 2024-25 (approx.)
-            fallback = {}
-            all_teams = teams.get_teams()
-            for t in all_teams:
-                fallback[t['abbreviation']] = {
-                    'def_rating': 112.0,
-                    'pace': 99.0
-                }
-            return fallback
+            print(f"   Team stats fallback: {e}")
+            return {t['abbreviation']: {'def_rating': 112.0, 'pace': 99.0}
+                    for t in teams.get_teams()}
 
-    def _get_opponent_abbr(self, matchup_str):
-        """
-        Extrait l'abréviation de l'adversaire depuis la chaîne MATCHUP.
-        Ex: 'LAL vs. GSW' → 'GSW'
-            'LAL @ BOS'   → 'BOS'
-        """
+    # ------------------------------------------------------------------
+    # HELPERS
+    # ------------------------------------------------------------------
+
+    def _get_player_id(self, player_name):
         try:
-            parts = matchup_str.strip().split()
-            # Format: "TEAM vs. OPP" ou "TEAM @ OPP"
-            return parts[-1].upper()
-        except:
+            all_p = players.get_players()
+            exact = [p for p in all_p if p['full_name'].lower() == player_name.lower()]
+            if exact:
+                return exact[0]['id']
+            partial = [p for p in all_p if player_name.lower() in p['full_name'].lower()]
+            return partial[0]['id'] if partial else None
+        except Exception as e:
+            print(f"Player ID error: {e}")
+            return None
+
+    def _parse_minutes(self, v):
+        try:
+            if isinstance(v, (int, float)):
+                return float(v)
+            if ':' in str(v):
+                p = str(v).split(':')
+                return float(p[0]) + float(p[1]) / 60
+            return float(v)
+        except Exception:
+            return 30.0
+
+    def _get_opp_abbr(self, matchup):
+        try:
+            return str(matchup).strip().split()[-1].upper()
+        except Exception:
             return 'UNK'
 
-    # =========================================================================
-    # PRINCIPAL: collecte données joueur
-    # =========================================================================
+    def _calculate_trend(self, series, window=5):
+        def slope(x):
+            if len(x) < 2:
+                return 0.0
+            return float(np.polyfit(np.arange(len(x)), x, 1)[0])
+        return series.shift(1).rolling(window, min_periods=2).apply(slope, raw=False)
+
+    def _exp_avg_rolling(self, series, span=5):
+        result = []
+        vals   = series.values
+        for i in range(len(vals)):
+            window = vals[max(0, i - span):i]
+            if len(window) == 0:
+                result.append(float(np.nanmean(vals)) if len(vals) > 0 else 0.0)
+                continue
+            w = np.exp(np.linspace(0, 1, len(window)))
+            result.append(float(np.average(window, weights=w / w.sum())))
+        return pd.Series(result, index=series.index)
+
+    # ------------------------------------------------------------------
+    # FILTRE MATCHS HORS NORMES
+    # ------------------------------------------------------------------
+
+    def _filter_outlier_games(self, df):
+        """
+        Retire les matchs hors normes avant le calcul des features.
+        1. Moins de 20 minutes jouees (blowout, foul trouble, blessure)
+        2. Stats > 2.5 ecarts-types de la moyenne du joueur (match exceptionnel isolé)
+        Retourne df_clean + nb de matchs exclus.
+        """
+        initial_count = len(df)
+
+        # 1. Filtre minutes
+        df_clean = df[df['MIN'] >= 20].copy()
+
+        # 2. Winsorisation — on ramene les valeurs extremes a moyenne ± 2.5σ
+        #    (on ne supprime pas, on cap, pour garder assez de donnees)
+        for col in ['PTS', 'AST', 'REB', 'FG3M']:
+            if col not in df_clean.columns:
+                continue
+            mean  = df_clean[col].mean()
+            std   = df_clean[col].std()
+            if std < 0.5:
+                continue
+            lower = mean - 2.5 * std
+            upper = mean + 2.5 * std
+            # Flag avant de cap
+            df_clean[f'{col}_was_outlier'] = (
+                (df_clean[col] < lower) | (df_clean[col] > upper)
+            ).astype(int)
+            df_clean[col] = df_clean[col].clip(lower, upper)
+
+        excluded = initial_count - len(df_clean)
+        if excluded > 0:
+            print(f"   Outlier filter: {excluded} matchs exclus (< 20 min)")
+
+        return df_clean, excluded
+
+    # ------------------------------------------------------------------
+    # MAIN DATA COLLECTION
+    # ------------------------------------------------------------------
 
     def get_complete_player_data(self, player_name, season='2024-25'):
-        """
-        Récupère données player avec 10 VARIABLES + 3PT
-        CORRECTION: opponent_def_rating et pace sont maintenant RÉELS
-        """
         try:
-            print(f"\n📥 Collecting {player_name}...")
-
+            print(f"\nCollecting {player_name} [{season}]...")
             player_id = self._get_player_id(player_name)
             if player_id is None:
-                print(f"❌ Player not found: {player_name}")
+                print(f"Player not found: {player_name}")
                 return None
 
             gamelog = playergamelog.PlayerGameLog(
@@ -113,158 +162,133 @@ class AdvancedDataCollector:
                 season_type_all_star='Regular Season'
             )
             time.sleep(0.6)
-
             df = gamelog.get_data_frames()[0]
 
             if df is None or len(df) == 0:
-                print(f"❌ No games found for {player_name}")
                 return None
 
-            print(f"   📊 Raw games: {len(df)}")
-
-            cols_needed = ['GAME_DATE', 'MATCHUP', 'MIN', 'PTS', 'AST', 'REB', 'FG3M']
-            available = [c for c in cols_needed if c in df.columns]
-            if len(available) < 5:
-                print(f"❌ Missing essential columns")
-                return None
-
-            df = df[available].copy()
-
-            # Parse date
+            cols = ['GAME_DATE', 'MATCHUP', 'WL', 'MIN', 'PTS', 'AST', 'REB', 'FG3M']
+            df   = df[[c for c in cols if c in df.columns]].copy()
             df['GAME_DATE'] = pd.to_datetime(df['GAME_DATE'], errors='coerce')
             df = df.dropna(subset=['GAME_DATE'])
+
+            # Plus recent en premier
             df = df.sort_values('GAME_DATE', ascending=False).reset_index(drop=True)
 
-            # Parse minutes
-            if 'MIN' in df.columns:
-                df['MIN'] = df['MIN'].fillna('0:00')
-                df['MIN'] = df['MIN'].apply(self._parse_minutes)
-            else:
-                df['MIN'] = 30.0
+            df['MIN'] = df['MIN'].fillna('0:00').apply(self._parse_minutes)
 
-            # Fill NaN stats
             for col in ['PTS', 'AST', 'REB', 'FG3M']:
                 if col in df.columns:
-                    df[col] = pd.to_numeric(df[col], errors='coerce')
-                    df[col] = df[col].fillna(df[col].mean() if len(df[col].dropna()) > 0 else 0)
+                    df[col] = pd.to_numeric(df[col], errors='coerce').fillna(0)
                 else:
-                    df[col] = 0
+                    df[col] = 0.0
 
-            # Home/Away
-            if 'MATCHUP' in df.columns:
-                df['home'] = df['MATCHUP'].apply(lambda x: 1 if 'vs.' in str(x) else 0)
-                df['opponent_abbr'] = df['MATCHUP'].apply(self._get_opponent_abbr)
-            else:
-                df['home'] = 0
-                df['opponent_abbr'] = 'UNK'
-
-            # Rest days
-            df['rest_days'] = df['GAME_DATE'].diff(-1).dt.days.fillna(2)
-            df['rest_days'] = df['rest_days'].clip(0, 7)
-
-            # ================================================================
-            # CORRECTION PRINCIPALE: opponent_def_rating et pace RÉELS
-            # ================================================================
-            team_stats = self.get_team_defensive_stats(season)
-
-            df['opponent_def_rating'] = df['opponent_abbr'].apply(
-                lambda abbr: team_stats.get(abbr, {}).get('def_rating', 112.0)
-            )
-            df['pace'] = df['opponent_abbr'].apply(
-                lambda abbr: team_stats.get(abbr, {}).get('pace', 99.0)
-            )
-
-            print(f"   ✅ Real def ratings: min={df['opponent_def_rating'].min():.1f}, "
-                  f"max={df['opponent_def_rating'].max():.1f}, "
-                  f"std={df['opponent_def_rating'].std():.2f}")
-
-            # Moyennes 5 derniers matchs
-            df['avg_pts_last_5'] = df['PTS'].shift(1).rolling(5, min_periods=1).mean()
-            df['avg_ast_last_5'] = df['AST'].shift(1).rolling(5, min_periods=1).mean()
-            df['avg_reb_last_5'] = df['REB'].shift(1).rolling(5, min_periods=1).mean()
-            df['avg_fg3m_last_5'] = df['FG3M'].shift(1).rolling(5, min_periods=1).mean()
-
-            # Moyennes 10 derniers matchs
-            df['avg_pts_last_10'] = df['PTS'].shift(1).rolling(10, min_periods=1).mean()
-            df['avg_ast_last_10'] = df['AST'].shift(1).rolling(10, min_periods=1).mean()
-            df['avg_reb_last_10'] = df['REB'].shift(1).rolling(10, min_periods=1).mean()
-            df['avg_fg3m_last_10'] = df['FG3M'].shift(1).rolling(10, min_periods=1).mean()
-
-            # Minutes moyenne
-            df['minutes_avg'] = df['MIN'].shift(1).rolling(10, min_periods=1).mean()
-
-            # Usage rate
-            total_production = df['PTS'] + df['AST'] + df['REB']
-            df['usage_rate'] = (total_production * df['MIN']) / total_production.mean()
-            df['usage_rate'] = df['usage_rate'].fillna(df['usage_rate'].mean())
-            df['usage_rate'] = df['usage_rate'].clip(0, 200)
-
-            # Back-to-back
+            df['home']         = df['MATCHUP'].apply(lambda x: 1 if 'vs.' in str(x) else 0)
+            df['opponent_abbr'] = df['MATCHUP'].apply(self._get_opp_abbr)
+            df['rest_days']    = df['GAME_DATE'].diff(-1).dt.days.fillna(2).clip(0, 7)
             df['back_to_back'] = (df['rest_days'] == 0).astype(int)
 
-            # Recent trend
-            df['recent_trend_pts'] = self._calculate_trend(df['PTS'], window=5)
-            df['recent_trend_ast'] = self._calculate_trend(df['AST'], window=5)
-            df['recent_trend_reb'] = self._calculate_trend(df['REB'], window=5)
-            df['recent_trend_fg3m'] = self._calculate_trend(df['FG3M'], window=5)
+            # FILTRE HORS NORMES
+            df, games_excluded = self._filter_outlier_games(df)
+            df['games_excluded_count'] = games_excluded  # stocke pour l'API
+
+            if len(df) < 10:
+                print(f"   Pas assez de matchs apres filtre: {len(df)}")
+                return None
+
+            # Stats defensives
+            team_stats = self.get_team_defensive_stats(season)
+            df['opponent_def_rating'] = df['opponent_abbr'].apply(
+                lambda a: team_stats.get(a, {}).get('def_rating', 112.0)
+            )
+            df['pace'] = df['opponent_abbr'].apply(
+                lambda a: team_stats.get(a, {}).get('pace', 99.0)
+            )
+
+            # Moyennes glissantes standard
+            for col, tag in [('PTS','pts'), ('AST','ast'), ('REB','reb'), ('FG3M','fg3m')]:
+                df[f'avg_{tag}_last_5']  = df[col].shift(1).rolling(5,  min_periods=1).mean()
+                df[f'avg_{tag}_last_10'] = df[col].shift(1).rolling(10, min_periods=1).mean()
+
+            # Minutes
+            df['minutes_avg']         = df['MIN'].shift(1).rolling(10, min_periods=1).mean()
+            df['minutes_consistency'] = df['MIN'].shift(1).rolling(10, min_periods=2).std().fillna(5.0)
+
+            # Usage rate
+            total = df['PTS'] + df['AST'] + df['REB']
+            df['usage_rate'] = ((total * df['MIN']) / total.mean().clip(1)).clip(0, 200).fillna(0)
+
+            # Trends
+            df['recent_trend_pts']  = self._calculate_trend(df['PTS'],  5)
+            df['recent_trend_ast']  = self._calculate_trend(df['AST'],  5)
+            df['recent_trend_reb']  = self._calculate_trend(df['REB'],  5)
+            df['recent_trend_fg3m'] = self._calculate_trend(df['FG3M'], 5)
+
+            # Per minute
+            safe_min = df['MIN'].replace(0, np.nan)
+            df['pts_per_min'] = (df['PTS'] / safe_min).fillna(0).clip(0, 3)
+            df['ast_per_min'] = (df['AST'] / safe_min).fillna(0).clip(0, 2)
+            df['reb_per_min'] = (df['REB'] / safe_min).fillna(0).clip(0, 2)
+
+            # Moyennes exponentielles
+            df['exp_avg_pts'] = self._exp_avg_rolling(df['PTS'].shift(1).fillna(df['PTS'].mean()))
+            df['exp_avg_ast'] = self._exp_avg_rolling(df['AST'].shift(1).fillna(df['AST'].mean()))
+            df['exp_avg_reb'] = self._exp_avg_rolling(df['REB'].shift(1).fillna(df['REB'].mean()))
+
+            # Momentum
+            df['pts_momentum'] = df['avg_pts_last_5'] - df['avg_pts_last_10']
+            df['ast_momentum'] = df['avg_ast_last_5'] - df['avg_ast_last_10']
+            df['reb_momentum'] = df['avg_reb_last_5'] - df['avg_reb_last_10']
+
+            # Recent over rate
+            for col, tag in [('PTS','pts'), ('AST','ast'), ('REB','reb')]:
+                avg = df[col].mean()
+                df[f'recent_over_rate_{tag}'] = (
+                    df[col].shift(1)
+                    .rolling(10, min_periods=3)
+                    .apply(lambda x: (x > avg).mean(), raw=True)
+                    .fillna(0.5)
+                )
 
             # Fill NaN final
-            for col in df.columns:
-                if df[col].dtype in [np.float64, np.int64]:
-                    df[col] = df[col].fillna(df[col].mean() if len(df[col].dropna()) > 0 else 0)
+            num_cols = df.select_dtypes(include=[np.number]).columns
+            for c in num_cols:
+                m = df[c].mean()
+                df[c] = df[c].fillna(m if pd.notna(m) else 0.0)
 
-            # Drop premiers matchs instables (pas assez d'historique pour les rolling)
-            if len(df) > 15:
-                df = df[10:].reset_index(drop=True)
-                print(f"   🔧 Removed first 10 games (unstable features)")
+            if len(df) > 10:
+                df = df.iloc[5:].reset_index(drop=True)
 
-            print(f"   ✅ Final: {len(df)} games, {len(df.columns)} features")
-            print(f"   📊 Stats: PTS, AST, REB, 3PT | Def ratings: REAL")
-
-            if len(df) < 15:
-                print(f"   ⚠️  Only {len(df)} games - might be insufficient")
-
+            print(f"   {len(df)} matchs, {len(df.columns)} features, {games_excluded} exclus")
             return df
 
         except Exception as e:
-            print(f"❌ ERROR collecting {player_name}: {e}")
-            import traceback
-            traceback.print_exc()
+            print(f"ERROR {player_name}: {e}")
+            import traceback; traceback.print_exc()
             return None
 
-    def _calculate_trend(self, series, window=5):
-        def linear_slope(x):
-            if len(x) < 2:
-                return 0
-            indices = np.arange(len(x))
-            slope = np.polyfit(indices, x, 1)[0]
-            return slope
-        return series.shift(1).rolling(window, min_periods=2).apply(linear_slope, raw=False)
+    # ------------------------------------------------------------------
+    # LINE VALUE SCORE
+    # ------------------------------------------------------------------
 
-    def _get_player_id(self, player_name):
-        try:
-            all_players = players.get_players()
-            player = [p for p in all_players if p['full_name'].lower() == player_name.lower()]
-            if player:
-                return player[0]['id']
-            player = [p for p in all_players if player_name.lower() in p['full_name'].lower()]
-            if player:
-                return player[0]['id']
-            return None
-        except Exception as e:
-            print(f"Error finding player ID: {e}")
-            return None
+    def get_line_value_score(self, player_name, stat_type, bookmaker_line, season='2024-25'):
+        df = self.get_complete_player_data(player_name, season)
+        if df is None or len(df) < 5:
+            return 0.0
+        col = {'points': 'PTS', 'assists': 'AST', 'rebounds': 'REB', '3pt': 'FG3M'}.get(stat_type, 'PTS')
+        if col not in df.columns:
+            return 0.0
+        avg5  = float(df[col].head(5).mean())
+        avg10 = float(df[col].head(10).mean())
+        wtd   = avg5 * 0.7 + avg10 * 0.3
+        std   = float(df[col].head(15).std())
+        if std < 0.5:
+            return 0.0
+        return round((wtd - bookmaker_line) / std, 3)
 
-    def _parse_minutes(self, min_str):
-        try:
-            if isinstance(min_str, (int, float)):
-                return float(min_str)
-            if ':' in str(min_str):
-                parts = str(min_str).split(':')
-                return float(parts[0]) + float(parts[1]) / 60
-            return float(min_str)
-        except:
-            return 30.0
+    # ------------------------------------------------------------------
+    # PREPARE FEATURES
+    # ------------------------------------------------------------------
 
     def prepare_features_for_prediction(self, player_name, opponent='', is_home=True, current_features=None):
         try:
@@ -273,30 +297,8 @@ class AdvancedDataCollector:
             df = self.get_complete_player_data(player_name)
             if df is None or len(df) == 0:
                 return None
-            features = df.iloc[0:1].copy()
-            features = features.select_dtypes(include=[np.number])
-            features = features.drop(columns=['PTS', 'AST', 'REB', 'FG3M'], errors='ignore')
-            return features
+            features = df.iloc[0:1].copy().select_dtypes(include=[np.number])
+            return features.drop(columns=['PTS', 'AST', 'REB', 'FG3M'], errors='ignore')
         except Exception as e:
-            print(f"❌ Prepare features error: {e}")
+            print(f"Prepare features error: {e}")
             return None
-
-
-if __name__ == "__main__":
-    collector = AdvancedDataCollector()
-
-    print("\n" + "="*70)
-    print("TEST: REAL OPPONENT DEF RATINGS + PACE")
-    print("="*70)
-
-    df = collector.get_complete_player_data("Stephen Curry", "2024-25")
-
-    if df is not None:
-        print("\n✅ SUCCÈS!")
-        print(f"\nMatchs: {len(df)}")
-        print(f"\nVariation opponent_def_rating (doit être > 0):")
-        print(df['opponent_def_rating'].describe())
-        print(f"\nVariation pace (doit être > 0):")
-        print(df['pace'].describe())
-    else:
-        print("\n❌ ÉCHEC")
