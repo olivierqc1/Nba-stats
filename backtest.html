@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🔬 Backtest — NBA Analyzer</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 16px;
+        }
+        .container { max-width: 700px; margin: 0 auto; }
+
+        /* Header */
+        .header {
+            background: white;
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 16px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .header h1 { color: #667eea; font-size: 1.6em; }
+        .btn-back {
+            background: #667eea;
+            color: white;
+            padding: 10px 18px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 0.9em;
+        }
+
+        /* Explication */
+        .explainer {
+            background: #dbeafe;
+            border: 2px solid #3b82f6;
+            border-radius: 12px;
+            padding: 18px;
+            margin-bottom: 16px;
+            color: #1e40af;
+            font-size: 0.95em;
+            line-height: 1.6;
+        }
+        .explainer strong { color: #1e3a8a; }
+
+        /* Form */
+        .form-card {
+            background: white;
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 16px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+        }
+        .form-card h2 { color: #667eea; margin-bottom: 20px; font-size: 1.2em; }
+        .form-group { margin-bottom: 14px; }
+        .form-group label {
+            display: block;
+            font-weight: 600;
+            color: #444;
+            margin-bottom: 6px;
+            font-size: 0.9em;
+        }
+        .form-group input,
+        .form-group select {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 1em;
+        }
+        .form-group input:focus,
+        .form-group select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        .btn-run {
+            width: 100%;
+            padding: 16px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            border-radius: 10px;
+            font-size: 1.1em;
+            font-weight: 700;
+            cursor: pointer;
+            margin-top: 8px;
+            transition: opacity 0.2s;
+        }
+        .btn-run:disabled { opacity: 0.5; cursor: not-allowed; }
+
+        /* Loading */
+        .loading {
+            background: white;
+            border-radius: 16px;
+            padding: 40px;
+            text-align: center;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+            margin-bottom: 16px;
+        }
+        .spinner {
+            border: 4px solid #f0f0f0;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 48px;
+            height: 48px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 16px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .loading p { color: #666; margin-top: 8px; font-size: 0.9em; }
+
+        /* Résultats */
+        .results-card {
+            background: white;
+            border-radius: 16px;
+            padding: 24px;
+            margin-bottom: 16px;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+        }
+
+        /* Verdict */
+        .verdict {
+            padding: 20px;
+            border-radius: 12px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+        .verdict.positive { background: #d1fae5; border: 2px solid #10b981; }
+        .verdict.marginal { background: #fef3c7; border: 2px solid #f59e0b; }
+        .verdict.negative { background: #fee2e2; border: 2px solid #ef4444; }
+        .verdict-title { font-size: 1.4em; font-weight: 800; margin-bottom: 6px; }
+        .verdict.positive .verdict-title { color: #065f46; }
+        .verdict.marginal .verdict-title { color: #78350f; }
+        .verdict.negative .verdict-title { color: #991b1b; }
+        .verdict-sub { font-size: 0.95em; }
+        .verdict.positive .verdict-sub { color: #047857; }
+        .verdict.marginal .verdict-sub { color: #92400e; }
+        .verdict.negative .verdict-sub { color: #b91c1c; }
+
+        /* Stats grid */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 12px;
+            margin-bottom: 20px;
+        }
+        .stat-box {
+            background: #f8f9fa;
+            border-radius: 10px;
+            padding: 16px;
+            text-align: center;
+        }
+        .stat-box .label { font-size: 0.8em; color: #888; margin-bottom: 4px; }
+        .stat-box .value {
+            font-size: 1.7em;
+            font-weight: 800;
+            color: #333;
+        }
+        .stat-box .value.positive { color: #10b981; }
+        .stat-box .value.negative { color: #ef4444; }
+
+        /* Break-even bar */
+        .breakeven-section { margin-bottom: 20px; }
+        .breakeven-section .label-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.85em;
+            color: #666;
+            margin-bottom: 6px;
+        }
+        .bar-bg {
+            background: #f0f0f0;
+            border-radius: 99px;
+            height: 14px;
+            position: relative;
+            overflow: hidden;
+        }
+        .bar-fill {
+            height: 100%;
+            border-radius: 99px;
+            transition: width 0.8s ease;
+        }
+        .bar-fill.positive { background: #10b981; }
+        .bar-fill.marginal { background: #f59e0b; }
+        .bar-fill.negative { background: #ef4444; }
+        .bar-marker {
+            position: absolute;
+            top: -2px;
+            bottom: -2px;
+            width: 3px;
+            background: #374151;
+            border-radius: 2px;
+        }
+        .bar-marker-label {
+            font-size: 0.75em;
+            color: #374151;
+            text-align: center;
+            margin-top: 4px;
+            font-weight: 600;
+        }
+
+        /* Bets table */
+        .bets-section h3 { color: #667eea; margin-bottom: 12px; font-size: 1em; }
+        .bet-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 12px;
+            border-radius: 8px;
+            margin-bottom: 6px;
+            font-size: 0.88em;
+        }
+        .bet-row.won { background: #f0fdf4; }
+        .bet-row.lost { background: #fff5f5; }
+        .bet-info { color: #444; }
+        .bet-date { color: #999; font-size: 0.8em; }
+        .bet-profit { font-weight: 700; }
+        .bet-profit.pos { color: #10b981; }
+        .bet-profit.neg { color: #ef4444; }
+
+        /* Error */
+        .error-card {
+            background: #fee2e2;
+            border: 2px solid #fca5a5;
+            border-radius: 12px;
+            padding: 20px;
+            color: #991b1b;
+            text-align: center;
+            margin-bottom: 16px;
+        }
+
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+<div class="container">
+
+    <div class="header">
+        <h1>🔬 Backtest</h1>
+        <a href="index.html" class="btn-back">← Retour</a>
+    </div>
+
+    <div class="explainer">
+        <strong>Comment ça fonctionne?</strong><br>
+        Le backtest simule tes paris sur une saison passée complète — sans risquer d'argent réel.
+        Pour chaque match historique, il entraîne le modèle sur ce qui s'est passé <em>avant</em>,
+        prédit le résultat, et vérifie si tu aurais gagné.<br><br>
+        <strong>Résultat positif</strong> → ton modèle a un vrai edge, continue à parier.<br>
+        <strong>Résultat négatif</strong> → le modèle est cassé, arrête de parier.
+    </div>
+
+    <!-- Formulaire -->
+    <div class="form-card">
+        <h2>⚙️ Paramètres</h2>
+
+        <div class="form-group">
+            <label>Joueur</label>
+            <input type="text" id="player" value="LeBron James" placeholder="ex: Stephen Curry">
+        </div>
+
+        <div class="form-group">
+            <label>Statistique</label>
+            <select id="stat_type">
+                <option value="points">Points</option>
+                <option value="assists">Assists</option>
+                <option value="rebounds">Rebounds</option>
+                <option value="3pt">3-Points</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label>Saison à tester</label>
+            <select id="season">
+                <option value="2023-24">2023-24 (saison complète — recommandé)</option>
+                <option value="2022-23">2022-23</option>
+                <option value="2024-25">2024-25 (en cours — partiel)</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label>Edge minimum pour parier (%)</label>
+            <select id="min_edge">
+                <option value="3">3% (permissif — plus de paris)</option>
+                <option value="5" selected>5% (recommandé)</option>
+                <option value="8">8% (strict — moins de paris)</option>
+                <option value="10">10% (très strict)</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label>Mise par pari (€)</label>
+            <input type="number" id="stake" value="50" min="1" max="500">
+        </div>
+
+        <button class="btn-run" id="btnRun" onclick="runBacktest()">
+            🚀 Lancer le Backtest
+        </button>
+        <p style="text-align:center; color:#999; font-size:0.8em; margin-top:10px;">
+            ⏱️ Durée estimée: 3–8 minutes selon le joueur
+        </p>
+    </div>
+
+    <!-- Loading -->
+    <div class="loading hidden" id="loading">
+        <div class="spinner"></div>
+        <h3>Backtest en cours...</h3>
+        <p>Le modèle simule chaque match de la saison.</p>
+        <p>Ne ferme pas cette page.</p>
+    </div>
+
+    <!-- Erreur -->
+    <div class="error-card hidden" id="errorCard">
+        <strong>❌ Erreur</strong><br>
+        <span id="errorMsg"></span>
+    </div>
+
+    <!-- Résultats -->
+    <div class="results-card hidden" id="results">
+        <div id="verdictBox" class="verdict"></div>
+
+        <div class="stats-grid">
+            <div class="stat-box">
+                <div class="label">Paris effectués</div>
+                <div class="value" id="totalBets">—</div>
+            </div>
+            <div class="stat-box">
+                <div class="label">Win Rate</div>
+                <div class="value" id="winRate">—</div>
+            </div>
+            <div class="stat-box">
+                <div class="label">Profit total</div>
+                <div class="value" id="profit">—</div>
+            </div>
+            <div class="stat-box">
+                <div class="label">ROI</div>
+                <div class="value" id="roi">—</div>
+            </div>
+            <div class="stat-box">
+                <div class="label">Victoires / Défaites</div>
+                <div class="value" id="record">—</div>
+            </div>
+            <div class="stat-box">
+                <div class="label">Erreur moy. prédiction</div>
+                <div class="value" id="avgError">—</div>
+            </div>
+        </div>
+
+        <!-- Barre break-even -->
+        <div class="breakeven-section">
+            <div class="label-row">
+                <span>Win Rate</span>
+                <span id="breakEvenLabel">Break-even: 52.4%</span>
+            </div>
+            <div class="bar-bg">
+                <div class="bar-fill" id="barFill" style="width:0%"></div>
+                <div class="bar-marker" id="barMarker" style="left:52.4%"></div>
+            </div>
+            <div class="bar-marker-label">▲ Break-even</div>
+        </div>
+
+        <!-- Derniers paris -->
+        <div class="bets-section">
+            <h3>📋 Derniers paris simulés</h3>
+            <div id="betsList"></div>
+        </div>
+    </div>
+
+</div>
+
+<script>
+    const API_URL = 'https://nba-stats-xcyv.onrender.com';
+
+    async function runBacktest() {
+        const player = document.getElementById('player').value.trim();
+        const stat_type = document.getElementById('stat_type').value;
+        const season = document.getElementById('season').value;
+        const min_edge = parseFloat(document.getElementById('min_edge').value);
+        const stake = parseFloat(document.getElementById('stake').value);
+
+        if (!player) {
+            alert('Entre le nom d\'un joueur');
+            return;
+        }
+
+        // UI
+        document.getElementById('btnRun').disabled = true;
+        document.getElementById('loading').classList.remove('hidden');
+        document.getElementById('results').classList.add('hidden');
+        document.getElementById('errorCard').classList.add('hidden');
+
+        try {
+            const response = await fetch(`${API_URL}/api/backtest`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ player, stat_type, season, min_edge, stake }),
+                signal: AbortSignal.timeout(600000) // 10 min max
+            });
+
+            const data = await response.json();
+
+            if (data.status === 'ERROR') {
+                showError(data.message);
+            } else if (data.status === 'NO_BETS') {
+                showError(`${data.message} — Essaie de baisser l'edge minimum à 3%.`);
+            } else {
+                showResults(data, stake);
+            }
+
+        } catch (err) {
+            showError(err.name === 'TimeoutError'
+                ? 'Timeout — Render a mis trop de temps. Réessaie dans quelques minutes.'
+                : `Erreur réseau: ${err.message}`);
+        } finally {
+            document.getElementById('loading').classList.add('hidden');
+            document.getElementById('btnRun').disabled = false;
+        }
+    }
+
+    function showError(msg) {
+        document.getElementById('errorMsg').textContent = msg;
+        document.getElementById('errorCard').classList.remove('hidden');
+    }
+
+    function showResults(data, stake) {
+        const BREAK_EVEN = data.break_even || 52.38;
+        const wr = data.win_rate;
+        const roi = data.roi;
+        const profit = data.total_profit;
+
+        // Verdict
+        let verdictClass, verdictTitle, verdictSub;
+        if (wr > BREAK_EVEN + 3) {
+            verdictClass = 'positive';
+            verdictTitle = '✅ Edge détecté — Continue à parier';
+            verdictSub = `Win rate de ${wr}% au-dessus du break-even de ${BREAK_EVEN}%.`;
+        } else if (wr > BREAK_EVEN) {
+            verdictClass = 'marginal';
+            verdictTitle = '⚡ Edge marginal — Prudence';
+            verdictSub = `Légèrement au-dessus du break-even. Teste sur plus de saisons avant de miser fort.`;
+        } else if (data.total_bets < 20) {
+            verdictClass = 'marginal';
+            verdictTitle = '❓ Échantillon trop petit';
+            verdictSub = `Seulement ${data.total_bets} paris qualifiés. Baisse le min_edge à 3% pour plus de données.`;
+        } else {
+            verdictClass = 'negative';
+            verdictTitle = '❌ Pas d\'edge — Arrête de parier';
+            verdictSub = `Win rate de ${wr}% sous le break-even de ${BREAK_EVEN}%. Le modèle perd de l'argent long terme.`;
+        }
+
+        document.getElementById('verdictBox').className = `verdict ${verdictClass}`;
+        document.getElementById('verdictBox').innerHTML = `
+            <div class="verdict-title">${verdictTitle}</div>
+            <div class="verdict-sub">${verdictSub}</div>
+        `;
+
+        // Stats
+        const profitSign = profit >= 0 ? '+' : '';
+        const roiSign = roi >= 0 ? '+' : '';
+
+        document.getElementById('totalBets').textContent = data.total_bets;
+        document.getElementById('winRate').textContent = `${wr}%`;
+        document.getElementById('winRate').className = `value ${wr > BREAK_EVEN ? 'positive' : 'negative'}`;
+
+        document.getElementById('profit').textContent = `${profitSign}${profit}€`;
+        document.getElementById('profit').className = `value ${profit >= 0 ? 'positive' : 'negative'}`;
+
+        document.getElementById('roi').textContent = `${roiSign}${roi}%`;
+        document.getElementById('roi').className = `value ${roi >= 0 ? 'positive' : 'negative'}`;
+
+        document.getElementById('record').textContent = `${data.wins}W — ${data.losses}L`;
+        document.getElementById('avgError').textContent = `${data.avg_error} pts`;
+
+        // Barre break-even
+        const barPct = Math.min(wr, 80); // Cap à 80% pour la barre
+        const markerPct = Math.min(BREAK_EVEN, 80);
+        const fillColor = wr > BREAK_EVEN + 3 ? 'positive' : wr > BREAK_EVEN ? 'marginal' : 'negative';
+
+        document.getElementById('barFill').style.width = `${(barPct / 80) * 100}%`;
+        document.getElementById('barFill').className = `bar-fill ${fillColor}`;
+        document.getElementById('barMarker').style.left = `${(markerPct / 80) * 100}%`;
+        document.getElementById('breakEvenLabel').textContent = `Break-even: ${BREAK_EVEN}%`;
+
+        // Derniers paris
+        const betsHtml = (data.bets || []).reverse().map(bet => `
+            <div class="bet-row ${bet.won ? 'won' : 'lost'}">
+                <div>
+                    <div class="bet-info">
+                        ${bet.recommendation} ${bet.line} 
+                        | Préd: <strong>${bet.prediction}</strong> 
+                        | Réel: <strong>${bet.actual}</strong>
+                        | Edge: ${bet.edge}%
+                    </div>
+                    <div class="bet-date">${bet.date}</div>
+                </div>
+                <div class="bet-profit ${bet.won ? 'pos' : 'neg'}">
+                    ${bet.won ? '+' : ''}${bet.profit}€
+                </div>
+            </div>
+        `).join('');
+
+        document.getElementById('betsList').innerHTML = betsHtml || '<p style="color:#999">Aucun pari</p>';
+
+        document.getElementById('results').classList.remove('hidden');
+        document.getElementById('results').scrollIntoView({ behavior: 'smooth' });
+    }
+</script>
+</body>
+</html>
