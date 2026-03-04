@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-NBA Analyzer - Module Backtest v2
+NBA Analyzer - Module Backtest v3
 Corrections:
-- line_value seuil abaisse a 0.2 (plus de paris simules)
-- Minimum 30 paris pour verdict fiable (sinon: INSUFFICIENT_SAMPLE)
-- Filtre RMSE/ligne < 40% (modele trop imprécis = skip)
+- Filtre DNP explicite (réel == 0 → skip)
+- Sanity check: prédiction < 50% de la ligne → modèle invalide pour ce match
+- Intervalle de confiance clampé à 0 (pas de valeurs négatives)
+- line_value seuil à 0.2, min 30 paris pour verdict
+- Filtre RMSE/ligne < 40%
 """
 
 import random
@@ -13,12 +15,15 @@ import numpy as np
 from flask import request, jsonify
 from scipy import stats as scipy_stats
 
-VIG_BREAK_EVEN  = 52.38
-ODDS            = -110
-MIN_TRAIN       = 20
-MIN_BETS_VERDICT = 30       # Minimum paris pour verdict fiable
-LINE_VALUE_MIN  = 0.2       # Abaisse de 0.3 → 0.2 pour plus de volume
-MAX_RMSE_RATIO  = 0.40      # RMSE / ligne max (ex: ligne=15 → RMSE max 6.0)
+VIG_BREAK_EVEN   = 52.38
+ODDS             = -110
+MIN_TRAIN        = 20
+MIN_BETS_VERDICT = 30
+LINE_VALUE_MIN   = 0.2
+MAX_RMSE_RATIO   = 0.40
+# Sanity check: si prédiction < X% de la ligne → modèle déréglé pour ce joueur
+PRED_LINE_RATIO_MIN = 0.50   # prédiction doit être >= 50% de la ligne
+PRED_LINE_RATIO_MAX = 2.00   # prédiction doit être <= 200% de la ligne
 
 FEATURE_SETS = {
     'points': [
@@ -53,10 +58,6 @@ FEATURE_SETS = {
 STAT_COL = {'points': 'PTS', 'assists': 'AST', 'rebounds': 'REB', '3pt': 'FG3M'}
 
 
-# ------------------------------------------------------------------
-# HELPERS
-# ------------------------------------------------------------------
-
 def _simulate_line(historical_values):
     if len(historical_values) < 3:
         return None
@@ -78,16 +79,12 @@ def _line_value(historical_series, line):
 
 
 def _verdict(total_bets, win_rate):
-    """
-    Verdict base sur sample size ET win rate.
-    Retourne un dict avec status, label, message.
-    """
     if total_bets < MIN_BETS_VERDICT:
         return {
-            'verdict':        'INSUFFICIENT_SAMPLE',
-            'verdict_label':  '⚠️ Échantillon insuffisant',
-            'verdict_msg':    f'Seulement {total_bets} paris simulés — besoin de {MIN_BETS_VERDICT} minimum pour un verdict fiable. Essaie une saison complète (2023-24) ou baisse le filtre min_edge.',
-            'verdict_color':  'orange'
+            'verdict':       'INSUFFICIENT_SAMPLE',
+            'verdict_label': '⚠️ Échantillon insuffisant',
+            'verdict_msg':   f'Seulement {total_bets} paris simulés — besoin de {MIN_BETS_VERDICT} minimum. Essaie la saison 2023-24 ou baisse min_edge.',
+            'verdict_color': 'orange'
         }
     if win_rate >= 58.0:
         return {
@@ -100,14 +97,14 @@ def _verdict(total_bets, win_rate):
         return {
             'verdict':       'MARGINAL_EDGE',
             'verdict_label': '⚡ Edge marginal — Prudence',
-            'verdict_msg':   f'Win rate {win_rate}% légèrement au-dessus du break-even. Augmente les filtres (min_edge, min_r2).',
+            'verdict_msg':   f'Win rate {win_rate}% légèrement au-dessus du break-even. Augmente les filtres.',
             'verdict_color': 'yellow'
         }
     if win_rate >= 52.38:
         return {
             'verdict':       'NO_EDGE',
             'verdict_label': '❌ Pas d\'edge réel',
-            'verdict_msg':   f'Win rate {win_rate}% trop proche du break-even de 52.4%. Le modèle ne bat pas les books sur cet échantillon.',
+            'verdict_msg':   f'Win rate {win_rate}% trop proche du break-even 52.4%.',
             'verdict_color': 'red'
         }
     return {
@@ -117,10 +114,6 @@ def _verdict(total_bets, win_rate):
         'verdict_color': 'red'
     }
 
-
-# ------------------------------------------------------------------
-# WALK-FORWARD BACKTEST
-# ------------------------------------------------------------------
 
 def _run_walkforward(player_name, stat_type, season, min_edge, stake, collector):
     import xgboost as xgb
@@ -144,14 +137,24 @@ def _run_walkforward(player_name, stat_type, season, min_edge, stake, collector)
 
     random.seed(42); np.random.seed(42)
 
-    bets          = []
-    all_errors    = []
-    skipped_rmse  = 0   # Paris skippés car RMSE trop élevé vs ligne
-    skipped_lv    = 0   # Paris skippés car line_value trop faible
+    bets              = []
+    all_errors        = []
+    skipped_dnp       = 0   # DNP / joueur absent
+    skipped_rmse      = 0   # RMSE trop élevé vs ligne
+    skipped_lv        = 0   # line_value trop faible
+    skipped_sanity    = 0   # prédiction trop loin de la ligne (modèle déréglé)
 
     for i in range(MIN_TRAIN, len(df)):
-        # Skip matchs < 20 minutes (outlier filter dans le backtest aussi)
+        actual = float(df.iloc[i][target_col])
+
+        # FILTRE DNP: réel == 0 = joueur n'a pas joué
+        if actual == 0:
+            skipped_dnp += 1
+            continue
+
+        # FILTRE MIN < 20 min
         if 'MIN' in df.columns and float(df.iloc[i].get('MIN', 30)) < 20:
+            skipped_dnp += 1
             continue
 
         df_train = df.iloc[:i]
@@ -161,8 +164,7 @@ def _run_walkforward(player_name, stat_type, season, min_edge, stake, collector)
         if len(X_train) < 10:
             continue
 
-        actual = float(df.iloc[i][target_col])
-        line   = _simulate_line(df_train[target_col].values)
+        line = _simulate_line(df_train[target_col].values)
         if line is None or line <= 0:
             continue
 
@@ -183,17 +185,24 @@ def _run_walkforward(player_name, stat_type, season, min_edge, stake, collector)
 
         X_pred     = df.iloc[i:i+1][feat_cols].fillna(X_train.mean())
         prediction = float(model.predict(X_pred)[0])
+        prediction = max(prediction, 0)  # jamais négatif
         all_errors.append(abs(actual - prediction))
 
-        # FILTRE 1: RMSE / ligne > 40% → modèle trop imprécis pour ce match
+        # FILTRE RMSE/ligne > 40%
         if line > 0 and (train_rmse / line) > MAX_RMSE_RATIO:
             skipped_rmse += 1
             continue
 
-        # FILTRE 2: line_value (abaissé à 0.2)
+        # FILTRE line_value
         lv = _line_value(df_train[target_col].values, line)
         if lv < LINE_VALUE_MIN:
             skipped_lv += 1
+            continue
+
+        # SANITY CHECK: prédiction trop loin de la ligne = modèle déréglé
+        pred_ratio = prediction / line if line > 0 else 1.0
+        if pred_ratio < PRED_LINE_RATIO_MIN or pred_ratio > PRED_LINE_RATIO_MAX:
+            skipped_sanity += 1
             continue
 
         # Calcul edge
@@ -226,15 +235,16 @@ def _run_walkforward(player_name, stat_type, season, min_edge, stake, collector)
             'profit':         round(profit, 2)
         })
 
-    # Résultat si aucun pari
     if not bets:
         return {
-            'status':            'NO_BETS',
-            'message':           f'0 pari qualifié. Skippés: {skipped_rmse} (RMSE trop élevé), {skipped_lv} (line_value faible). Essaie de baisser min_edge.',
-            'total_predictions': len(all_errors),
-            'skipped_rmse':      skipped_rmse,
-            'skipped_line_value': skipped_lv,
-            'avg_error':         round(float(np.mean(all_errors)), 2) if all_errors else 0
+            'status':              'NO_BETS',
+            'message':             f'0 pari qualifié. Skippés: {skipped_dnp} DNP, {skipped_rmse} RMSE, {skipped_lv} line_value, {skipped_sanity} sanity.',
+            'total_predictions':   len(all_errors),
+            'skipped_dnp':         skipped_dnp,
+            'skipped_rmse':        skipped_rmse,
+            'skipped_line_value':  skipped_lv,
+            'skipped_sanity':      skipped_sanity,
+            'avg_error':           round(float(np.mean(all_errors)), 2) if all_errors else 0
         }
 
     total_bets   = len(bets)
@@ -244,30 +254,28 @@ def _run_walkforward(player_name, stat_type, season, min_edge, stake, collector)
     verdict      = _verdict(total_bets, win_rate)
 
     return {
-        'status':       'SUCCESS',
-        'player':       player_name,
-        'stat_type':    stat_type,
-        'season':       season,
-        'total_bets':   total_bets,
-        'wins':         wins,
-        'losses':       total_bets - wins,
-        'win_rate':     win_rate,
-        'total_profit': round(total_profit, 2),
-        'roi':          round(total_profit / (total_bets * stake) * 100, 2),
-        'avg_error':    round(float(np.mean(all_errors)), 2) if all_errors else 0,
-        'avg_edge':     round(float(np.mean([b['edge'] for b in bets])), 1),
-        'avg_line_value':   round(float(np.mean([b['line_value'] for b in bets])), 2),
-        'break_even':       round(VIG_BREAK_EVEN, 1),
-        'skipped_rmse':     skipped_rmse,
+        'status':             'SUCCESS',
+        'player':             player_name,
+        'stat_type':          stat_type,
+        'season':             season,
+        'total_bets':         total_bets,
+        'wins':               wins,
+        'losses':             total_bets - wins,
+        'win_rate':           win_rate,
+        'total_profit':       round(total_profit, 2),
+        'roi':                round(total_profit / (total_bets * stake) * 100, 2),
+        'avg_error':          round(float(np.mean(all_errors)), 2) if all_errors else 0,
+        'avg_edge':           round(float(np.mean([b['edge'] for b in bets])), 1),
+        'avg_line_value':     round(float(np.mean([b['line_value'] for b in bets])), 2),
+        'break_even':         round(VIG_BREAK_EVEN, 1),
+        'skipped_dnp':        skipped_dnp,
+        'skipped_rmse':       skipped_rmse,
         'skipped_line_value': skipped_lv,
+        'skipped_sanity':     skipped_sanity,
         **verdict,
         'bets': bets[-20:]
     }
 
-
-# ------------------------------------------------------------------
-# ENREGISTREMENT ROUTE
-# ------------------------------------------------------------------
 
 def register_backtest_routes(app, collector):
 
@@ -283,7 +291,7 @@ def register_backtest_routes(app, collector):
         min_edge  = float(data.get('min_edge', 5.0))
         stake     = float(data.get('stake',    50.0))
 
-        print(f"\nBACKTEST: {player} | {stat_type} | {season} | edge>={min_edge}%")
+        print(f"\nBACKTEST v3: {player} | {stat_type} | {season} | edge>={min_edge}%")
         try:
             result = _run_walkforward(player, stat_type, season, min_edge, stake, collector)
             return jsonify(result)
@@ -291,5 +299,4 @@ def register_backtest_routes(app, collector):
             import traceback; traceback.print_exc()
             return jsonify({'status': 'ERROR', 'message': str(e)}), 500
 
-    print("   /api/backtest registered (v2 — min 30 bets, RMSE filter, line_value>=0.2)")
-
+    print("   /api/backtest registered (v3 — DNP filter, sanity check, CI>=0)")
