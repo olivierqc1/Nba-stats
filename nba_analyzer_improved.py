@@ -7,6 +7,7 @@ Le backtest est dans nba_analyzer_backtest.py
 """
 
 import os
+import json
 import random
 from flask import Flask, request, jsonify
 from flask_cors import CORS
@@ -313,6 +314,72 @@ def search_players():
         return jsonify({'players': results})
     except Exception as e:
         return jsonify({'players': [], 'error': str(e)})
+
+
+CACHE_FILE = 'backtest_cache.json'
+
+def _load_cache():
+    try:
+        if os.path.exists(CACHE_FILE):
+            with open(CACHE_FILE, 'r') as f:
+                return json.load(f)
+    except Exception:
+        pass
+    return {}
+
+def _save_cache(cache):
+    try:
+        with open(CACHE_FILE, 'w') as f:
+            json.dump(cache, f, indent=2)
+    except Exception as e:
+        print(f"Cache write error: {e}")
+
+@app.route('/api/backtest-cache', methods=['GET'])
+def get_backtest_cache():
+    """Retourne tout le cache backtest."""
+    return jsonify(_load_cache())
+
+@app.route('/api/backtest-cache/<player_name>', methods=['GET'])
+def get_player_cache(player_name):
+    """Retourne le cache d'un joueur spécifique."""
+    cache = _load_cache()
+    key   = player_name.lower().replace(' ', '_')
+    return jsonify(cache.get(key, {}))
+
+@app.route('/api/backtest-cache', methods=['POST'])
+def save_backtest_result():
+    """
+    Sauvegarde un résultat backtest dans le cache.
+    Body: { player, stat_type, season, win_rate, total_bets, roi, verdict }
+    """
+    data = request.get_json() or {}
+    player    = data.get('player', '')
+    stat_type = data.get('stat_type', 'points')
+    if not player:
+        return jsonify({'status': 'ERROR', 'message': 'player requis'}), 400
+
+    cache = _load_cache()
+    key   = player.lower().replace(' ', '_')
+
+    if key not in cache:
+        cache[key] = {}
+
+    cache[key][stat_type] = {
+        'player':     player,
+        'stat_type':  stat_type,
+        'season':     data.get('season', ''),
+        'win_rate':   data.get('win_rate', 0),
+        'total_bets': data.get('total_bets', 0),
+        'roi':        data.get('roi', 0),
+        'verdict':    data.get('verdict', ''),
+        'verdict_color': data.get('verdict_color', 'grey'),
+        'avg_error':  data.get('avg_error', 0),
+        'updated_at': __import__('datetime').datetime.utcnow().isoformat()
+    }
+
+    _save_cache(cache)
+    print(f"Cache saved: {player} / {stat_type} → {data.get('win_rate')}% win rate")
+    return jsonify({'status': 'OK', 'key': key})
 
 
 @app.route('/api/health', methods=['GET'])
