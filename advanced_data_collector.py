@@ -59,12 +59,52 @@ class AdvancedDataCollector:
 
     def _get_player_id(self, player_name):
         try:
-            all_p = players.get_players()
-            exact = [p for p in all_p if p['full_name'].lower() == player_name.lower()]
+            all_p      = players.get_players()
+            name_clean = player_name.strip().lower()
+
+            # 1. Correspondance exacte
+            exact = [p for p in all_p if p['full_name'].lower() == name_clean]
             if exact:
                 return exact[0]['id']
-            partial = [p for p in all_p if player_name.lower() in p['full_name'].lower()]
-            return partial[0]['id'] if partial else None
+
+            # 2. Nom contenu dans le nom complet
+            partial = [p for p in all_p if name_clean in p['full_name'].lower()]
+            if partial:
+                return partial[0]['id']
+
+            # 3. Tous les mots du nom entré présents dans le nom complet
+            #    ex: "keynote george" → tokens ["keynote","george"]
+            #    → matche "Keyonte George" si suffisamment proche
+            tokens = name_clean.split()
+            token_match = [
+                p for p in all_p
+                if all(t in p['full_name'].lower() for t in tokens)
+            ]
+            if token_match:
+                return token_match[0]['id']
+
+            # 4. Matching flou sur le nom de famille uniquement
+            #    Utile pour fautes de frappe légères (keynote → keyonte)
+            if len(tokens) >= 2:
+                last_name = tokens[-1]
+                last_match = [
+                    p for p in all_p
+                    if last_name in p['last_name'].lower()
+                ]
+                if len(last_match) == 1:
+                    return last_match[0]['id']
+                # Si plusieurs résultats, essayer de matcher aussi le prénom approx.
+                if len(last_match) > 1 and len(tokens[0]) >= 3:
+                    first_prefix = tokens[0][:3]
+                    refined = [
+                        p for p in last_match
+                        if p['first_name'].lower().startswith(first_prefix)
+                    ]
+                    if refined:
+                        return refined[0]['id']
+
+            print(f"Player not found: '{player_name}'")
+            return None
         except Exception as e:
             print(f"Player ID error: {e}")
             return None
@@ -113,7 +153,7 @@ class AdvancedDataCollector:
         """
         Retire les matchs hors normes avant le calcul des features.
         1. Moins de 20 minutes jouees (blowout, foul trouble, blessure)
-        2. Stats > 2.5 ecarts-types de la moyenne du joueur (match exceptionnel isolé)
+        2. Stats > 3.0 ecarts-types de la moyenne du joueur (match exceptionnel isolé)
         Retourne df_clean + nb de matchs exclus.
         """
         initial_count = len(df)
@@ -121,7 +161,7 @@ class AdvancedDataCollector:
         # 1. Filtre minutes
         df_clean = df[df['MIN'] >= 20].copy()
 
-        # 2. Winsorisation — on ramene les valeurs extremes a moyenne ± 2.5σ
+        # 2. Winsorisation — on ramene les valeurs extremes a moyenne ± 3.0σ (releve de 2.5 pour joueurs haute variance)
         #    (on ne supprime pas, on cap, pour garder assez de donnees)
         for col in ['PTS', 'AST', 'REB', 'FG3M']:
             if col not in df_clean.columns:
@@ -130,8 +170,8 @@ class AdvancedDataCollector:
             std   = df_clean[col].std()
             if std < 0.5:
                 continue
-            lower = mean - 2.5 * std
-            upper = mean + 2.5 * std
+            lower = mean - 3.0 * std
+            upper = mean + 3.0 * std
             # Flag avant de cap
             df_clean[f'{col}_was_outlier'] = (
                 (df_clean[col] < lower) | (df_clean[col] > upper)
