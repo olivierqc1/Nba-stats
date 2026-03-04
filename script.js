@@ -21,11 +21,14 @@ async function loadBacktestCache() {
 loadBacktestCache();
 
 // ── Badge fiabilité ──────────────────────────────────────────
-function getBadgeHtml(playerName, statType) {
+function getBadgeHtml(playerName, statType, inProgress = false) {
+  if (inProgress) {
+    return `<span class="bt-badge bt-grey" title="Backtest en cours...">⏳ En cours...</span>`;
+  }
   const key  = playerName.toLowerCase().replace(/ /g, '_');
   const data = backtestCache[key]?.[statType];
   if (!data || data.total_bets < 10) {
-    return `<span class="bt-badge bt-grey" title="Pas encore validé — Lance le backtest">⬜ Non testé</span>`;
+    return `<span class="bt-badge bt-grey" title="Backtest automatique en attente">⬜ Non testé</span>`;
   }
   const wr = data.win_rate;
   if (wr >= 60) return `<span class="bt-badge bt-green" title="${data.total_bets} paris · ${data.season}">🟢 ${wr}% (${data.total_bets} paris)</span>`;
@@ -86,11 +89,96 @@ async function scanOpportunities(statType) {
   }
 }
 
+// ── Auto-backtest pour joueurs non testés ────────────────────
+async function autoBacktestIfNeeded(playerName, statType) {
+  const key  = playerName.toLowerCase().replace(/ /g, '_');
+  const data = backtestCache[key]?.[statType];
+  if (data && data.total_bets >= 10) return; // déjà en cache
+
+  console.log(`Auto-backtest: ${playerName} / ${statType}`);
+
+  try {
+    const res  = await fetch(`${BACKEND}/api/backtest`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        player:    playerName,
+        stat_type: statType,
+        season:    '2023-24',   // saison complète = plus fiable
+        min_edge:  5,
+        stake:     50
+      })
+    });
+    const result = await res.json();
+
+    if (result.status === 'SUCCESS' && result.total_bets >= 10) {
+      // Sauvegarde dans le cache backend
+      await fetch(`${BACKEND}/api/backtest-cache`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          player:       result.player,
+          stat_type:    result.stat_type,
+          season:       result.season,
+          win_rate:     result.win_rate,
+          total_bets:   result.total_bets,
+          roi:          result.roi,
+          verdict:      result.verdict_label || '',
+          verdict_color: result.verdict_color || 'grey',
+          avg_error:    result.avg_error
+        })
+      });
+
+      // Met à jour le cache local et rafraîchit le badge sur la carte
+      if (!backtestCache[key]) backtestCache[key] = {};
+      backtestCache[key][statType] = {
+        player:    playerName,
+        stat_type: statType,
+        season:    result.season,
+        win_rate:  result.win_rate,
+        total_bets: result.total_bets,
+        roi:       result.roi
+      };
+
+      // Rafraîchit le badge dans le DOM sans recharger la page
+      document.querySelectorAll('.opp-player').forEach(el => {
+        if (el.textContent.includes(playerName)) {
+          const badgeEl = el.querySelector('.bt-badge');
+          if (badgeEl) badgeEl.outerHTML = getBadgeHtml(playerName, statType);
+        }
+      });
+
+      console.log(`✅ Auto-backtest OK: ${playerName} → ${result.win_rate}% (${result.total_bets} paris)`);
+    }
+  } catch (e) {
+    console.warn(`Auto-backtest échoué pour ${playerName}:`, e.message);
+  }
+}
+
 // ── Rendu des cartes ────────────────────────────────────────
 function displayOpportunities(opportunities, statType) {
   const container = document.getElementById('resultsDiv');
   container.classList.remove('hidden');
   container.innerHTML = opportunities.map((opp, i) => buildCard(opp, i + 1, statType)).join('');
+
+  // Lance auto-backtest en arrière-plan pour les joueurs non testés
+  // Délai échelonné pour ne pas surcharger le serveur (un à la fois)
+  opportunities.forEach((opp, i) => {
+    const key  = opp.player.toLowerCase().replace(/ /g, '_');
+    const data = backtestCache[key]?.[statType];
+    if (!data || data.total_bets < 10) {
+      setTimeout(() => {
+        // Affiche "⏳ En cours" avant de lancer
+        document.querySelectorAll('.opp-player').forEach(el => {
+          if (el.textContent.includes(opp.player)) {
+            const badgeEl = el.querySelector('.bt-badge');
+            if (badgeEl) badgeEl.outerHTML = getBadgeHtml(opp.player, statType, true);
+          }
+        });
+        autoBacktestIfNeeded(opp.player, statType);
+      }, i * 30000);
+    }
+  });
 }
 
 function buildCard(opp, rank, statType) {
