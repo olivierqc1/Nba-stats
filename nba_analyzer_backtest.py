@@ -160,6 +160,7 @@ def _run_walkforward(player_name, stat_type, season, min_edge, stake, collector)
         df_train = df.iloc[:i]
         X_train  = df_train[feat_cols].fillna(0)
         y_train  = df_train[target_col]
+        w_train  = df_train['sample_weight'].values if 'sample_weight' in df_train.columns else None
 
         if len(X_train) < 10:
             continue
@@ -175,7 +176,7 @@ def _run_walkforward(player_name, stat_type, season, min_edge, stake, collector)
                 reg_alpha=0.1, reg_lambda=1.0,
                 min_child_weight=3, random_state=42, verbosity=0
             )
-            model.fit(X_train, y_train)
+            model.fit(X_train, y_train, sample_weight=w_train)
         except Exception:
             continue
 
