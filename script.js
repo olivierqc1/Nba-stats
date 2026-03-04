@@ -89,70 +89,88 @@ async function scanOpportunities(statType) {
   }
 }
 
-// ── Auto-backtest pour joueurs non testés ────────────────────
+// ── Auto-backtest async (poll toutes les 10s) ────────────────
 async function autoBacktestIfNeeded(playerName, statType) {
   const key  = playerName.toLowerCase().replace(/ /g, '_');
   const data = backtestCache[key]?.[statType];
-  if (data && data.total_bets >= 10) return; // déjà en cache
+  if (data && data.total_bets >= 10) return;
 
-  console.log(`Auto-backtest: ${playerName} / ${statType}`);
+  console.log(`Auto-backtest async: ${playerName} / ${statType}`);
 
   try {
-    const res  = await fetch(`${BACKEND}/api/backtest`, {
+    // Lance le job en arrière-plan (retourne immédiatement)
+    const res = await fetch(`${BACKEND}/api/backtest/async`, {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({
-        player:    playerName,
-        stat_type: statType,
-        season:    '2023-24',   // saison complète = plus fiable
-        min_edge:  5,
-        stake:     50
-      })
+      body: JSON.stringify({ player: playerName, stat_type: statType, season: '2023-24', min_edge: 5, stake: 50 })
     });
-    const result = await res.json();
+    const launch = await res.json();
 
-    if (result.status === 'SUCCESS' && result.total_bets >= 10) {
-      // Sauvegarde dans le cache backend
-      await fetch(`${BACKEND}/api/backtest-cache`, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({
-          player:       result.player,
-          stat_type:    result.stat_type,
-          season:       result.season,
-          win_rate:     result.win_rate,
-          total_bets:   result.total_bets,
-          roi:          result.roi,
-          verdict:      result.verdict_label || '',
-          verdict_color: result.verdict_color || 'grey',
-          avg_error:    result.avg_error
-        })
-      });
-
-      // Met à jour le cache local et rafraîchit le badge sur la carte
-      if (!backtestCache[key]) backtestCache[key] = {};
-      backtestCache[key][statType] = {
-        player:    playerName,
-        stat_type: statType,
-        season:    result.season,
-        win_rate:  result.win_rate,
-        total_bets: result.total_bets,
-        roi:       result.roi
-      };
-
-      // Rafraîchit le badge dans le DOM sans recharger la page
-      document.querySelectorAll('.opp-player').forEach(el => {
-        if (el.textContent.includes(playerName)) {
-          const badgeEl = el.querySelector('.bt-badge');
-          if (badgeEl) badgeEl.outerHTML = getBadgeHtml(playerName, statType);
-        }
-      });
-
-      console.log(`✅ Auto-backtest OK: ${playerName} → ${result.win_rate}% (${result.total_bets} paris)`);
+    // Déjà en cache côté serveur
+    if (launch.status === 'cached' && launch.data) {
+      updateBadgeFromData(playerName, statType, launch.data);
+      return;
     }
+
+    if (launch.status !== 'started' || !launch.job_id) return;
+
+    // Poll toutes les 10 secondes max 60 fois (10 min)
+    let attempts = 0;
+    const poll = setInterval(async () => {
+      attempts++;
+      if (attempts > 60) { clearInterval(poll); return; }
+
+      try {
+        const pr = await fetch(`${BACKEND}/api/backtest/status/${launch.job_id}`);
+        const job = await pr.json();
+
+        if (job.status === 'done') {
+          clearInterval(poll);
+          const result = job.result;
+          if (result?.status === 'SUCCESS' && result.total_bets >= 10) {
+            const cacheData = {
+              player: playerName, stat_type: statType,
+              season: result.season, win_rate: result.win_rate,
+              total_bets: result.total_bets, roi: result.roi
+            };
+            if (!backtestCache[key]) backtestCache[key] = {};
+            backtestCache[key][statType] = cacheData;
+            updateBadgeFromData(playerName, statType, cacheData);
+            console.log(`✅ ${playerName} → ${result.win_rate}% (${result.total_bets} paris)`);
+          } else {
+            // Pas assez de paris — badge gris avec message
+            updateBadgeText(playerName, '⬜ Insuffisant');
+          }
+        }
+      } catch (e) { /* poll silencieux */ }
+    }, 10000);
+
   } catch (e) {
-    console.warn(`Auto-backtest échoué pour ${playerName}:`, e.message);
+    console.warn(`Auto-backtest failed: ${playerName}`, e.message);
   }
+}
+
+function updateBadgeFromData(playerName, statType, data) {
+  const wr = data.win_rate;
+  const label = wr >= 60
+    ? `🟢 ${wr}% (${data.total_bets} paris)`
+    : wr >= 55
+    ? `🟡 ${wr}% (${data.total_bets} paris)`
+    : `🔴 ${wr}% (${data.total_bets} paris)`;
+  const cls = wr >= 60 ? 'bt-green' : wr >= 55 ? 'bt-yellow' : 'bt-red';
+  updateBadgeText(playerName, label, cls);
+}
+
+function updateBadgeText(playerName, label, cls = 'bt-grey') {
+  document.querySelectorAll('.opp-player').forEach(el => {
+    if (el.textContent.includes(playerName)) {
+      const badge = el.querySelector('.bt-badge');
+      if (badge) {
+        badge.textContent = label;
+        badge.className   = `bt-badge ${cls}`;
+      }
+    }
+  });
 }
 
 // ── Rendu des cartes ────────────────────────────────────────
