@@ -151,36 +151,51 @@ class AdvancedDataCollector:
 
     def _filter_outlier_games(self, df):
         """
-        Retire les matchs hors normes avant le calcul des features.
-        1. Moins de 20 minutes jouees (blowout, foul trouble, blessure)
-        2. Stats > 3.0 ecarts-types de la moyenne du joueur (match exceptionnel isolé)
-        Retourne df_clean + nb de matchs exclus.
+        Au lieu de supprimer ou capper les matchs extremes:
+        1. Filtre uniquement les matchs < 20 min (vraiment inutilisables)
+        2. Calcule un sample_weight pour chaque match:
+           - Match normal (dans ±2σ) → poids 1.0
+           - Match hors norme (> 2σ) → poids réduit proportionnellement
+           - Plus le match est extreme, moins il pèse (min 0.15)
+        Le modèle XGBoost utilisera ces poids lors du fit().
         """
         initial_count = len(df)
 
-        # 1. Filtre minutes
+        # 1. Filtre minutes uniquement (DNP, blowout < 20 min)
         df_clean = df[df['MIN'] >= 20].copy()
-
-        # 2. Winsorisation — on ramene les valeurs extremes a moyenne ± 3.0σ (releve de 2.5 pour joueurs haute variance)
-        #    (on ne supprime pas, on cap, pour garder assez de donnees)
-        for col in ['PTS', 'AST', 'REB', 'FG3M']:
-            if col not in df_clean.columns:
-                continue
-            mean  = df_clean[col].mean()
-            std   = df_clean[col].std()
-            if std < 0.5:
-                continue
-            lower = mean - 3.0 * std
-            upper = mean + 3.0 * std
-            # Flag avant de cap
-            df_clean[f'{col}_was_outlier'] = (
-                (df_clean[col] < lower) | (df_clean[col] > upper)
-            ).astype(int)
-            df_clean[col] = df_clean[col].clip(lower, upper)
 
         excluded = initial_count - len(df_clean)
         if excluded > 0:
             print(f"   Outlier filter: {excluded} matchs exclus (< 20 min)")
+
+        # 2. Calcul du sample_weight par match
+        #    Basé sur l'écart aux stats principales (PTS, AST, REB)
+        weights = np.ones(len(df_clean))
+
+        for col in ['PTS', 'AST', 'REB']:
+            if col not in df_clean.columns:
+                continue
+            mean = df_clean[col].mean()
+            std  = df_clean[col].std()
+            if std < 0.5:
+                continue
+            z_scores = ((df_clean[col] - mean) / std).abs().values
+            # Au-delà de 2σ: poids = max(0.15, 1 - 0.25 * (z - 2))
+            # Exemple: z=2 → poids 1.0 | z=3 → 0.75 | z=4 → 0.5 | z=5+ → 0.15
+            col_weights = np.where(
+                z_scores <= 2.0,
+                1.0,
+                np.maximum(0.15, 1.0 - 0.25 * (z_scores - 2.0))
+            )
+            weights = weights * col_weights  # combine les 3 dimensions
+
+        # Normalise pour que la moyenne reste à 1.0
+        weights = weights / weights.mean()
+        df_clean['sample_weight'] = weights
+
+        outlier_count = (weights < 0.8).sum()
+        if outlier_count > 0:
+            print(f"   Weighting: {outlier_count} matchs extremes pondérés à la baisse")
 
         return df_clean, excluded
 
