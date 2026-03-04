@@ -151,26 +151,46 @@ class AdvancedDataCollector:
 
     def _filter_outlier_games(self, df):
         """
-        Au lieu de supprimer ou capper les matchs extremes:
-        1. Filtre uniquement les matchs < 20 min (vraiment inutilisables)
-        2. Calcule un sample_weight pour chaque match:
-           - Match normal (dans ±2σ) → poids 1.0
-           - Match hors norme (> 2σ) → poids réduit proportionnellement
-           - Plus le match est extreme, moins il pèse (min 0.15)
-        Le modèle XGBoost utilisera ces poids lors du fit().
+        Pondération des matchs selon 2 dimensions combinées:
+
+        1. RÉCENCE: les matchs récents pèsent plus (exponentiel)
+           - Match le plus récent → poids 1.0
+           - Match d'il y a 20 matchs → poids ~0.5
+           - Match d'il y a 40 matchs → poids ~0.25
+
+        2. EXTRÊME: les matchs hors norme pèsent moins (z-score)
+           - Match normal (≤2σ) → poids 1.0
+           - Match à 3σ → poids 0.75
+           - Match à 5σ+ → poids 0.15 min
+
+        Poids final = récence × extrême (normalisé)
+
+        Cas spécial: match récent ET extrême → récence compense partiellement
+        l'extrême (un 32 pts la semaine dernière est un vrai signal de forme)
         """
         initial_count = len(df)
 
         # 1. Filtre minutes uniquement (DNP, blowout < 20 min)
-        df_clean = df[df['MIN'] >= 20].copy()
+        df_clean = df[df['MIN'] >= 20].copy().reset_index(drop=True)
 
         excluded = initial_count - len(df_clean)
         if excluded > 0:
             print(f"   Outlier filter: {excluded} matchs exclus (< 20 min)")
 
-        # 2. Calcul du sample_weight par match
-        #    Basé sur l'écart aux stats principales (PTS, AST, REB)
-        weights = np.ones(len(df_clean))
+        n = len(df_clean)
+        if n == 0:
+            return df_clean, excluded
+
+        # 2. POIDS RÉCENCE — exponentiel basé sur la position chronologique
+        #    df est déjà trié par date dans get_complete_player_data()
+        #    Position 0 = plus vieux, position n-1 = plus récent
+        #    decay = 0.965 → match d'il y a 20 matchs pèse ~0.50
+        decay = 0.965
+        positions = np.arange(n)  # 0 = plus vieux, n-1 = plus récent
+        recency_weights = decay ** (n - 1 - positions)  # récent → exposant proche de 0 → poids ~1.0
+
+        # 3. POIDS EXTRÊME — basé sur z-score des stats principales
+        outlier_weights = np.ones(n)
 
         for col in ['PTS', 'AST', 'REB']:
             if col not in df_clean.columns:
@@ -180,22 +200,26 @@ class AdvancedDataCollector:
             if std < 0.5:
                 continue
             z_scores = ((df_clean[col] - mean) / std).abs().values
-            # Au-delà de 2σ: poids = max(0.15, 1 - 0.25 * (z - 2))
-            # Exemple: z=2 → poids 1.0 | z=3 → 0.75 | z=4 → 0.5 | z=5+ → 0.15
             col_weights = np.where(
                 z_scores <= 2.0,
                 1.0,
                 np.maximum(0.15, 1.0 - 0.25 * (z_scores - 2.0))
             )
-            weights = weights * col_weights  # combine les 3 dimensions
+            outlier_weights = outlier_weights * col_weights
+
+        # 4. COMBINAISON: récence × extrême
+        #    Un match récent extrême récupère du poids grâce à la récence
+        #    Un vieux match extrême est doublement pénalisé
+        combined = recency_weights * outlier_weights
 
         # Normalise pour que la moyenne reste à 1.0
-        weights = weights / weights.mean()
-        df_clean['sample_weight'] = weights
+        combined = combined / combined.mean()
+        df_clean['sample_weight'] = combined
 
-        outlier_count = (weights < 0.8).sum()
-        if outlier_count > 0:
-            print(f"   Weighting: {outlier_count} matchs extremes pondérés à la baisse")
+        # Log pour debug
+        n_downweighted = (combined < 0.5).sum()
+        if n_downweighted > 0:
+            print(f"   Weighting: {n_downweighted} matchs fortement pondérés à la baisse")
 
         return df_clean, excluded
 
