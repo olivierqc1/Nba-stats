@@ -283,6 +283,38 @@ def get_player_history(player_name):
 # HEALTH + USAGE
 # ------------------------------------------------------------------
 
+@app.route('/api/players/search', methods=['GET'])
+def search_players():
+    """
+    Autocomplete: retourne les joueurs NBA dont le nom contient la query.
+    Usage: GET /api/players/search?q=keyont
+    Retourne max 10 suggestions triées par pertinence.
+    """
+    q = request.args.get('q', '').strip().lower()
+    if len(q) < 2:
+        return jsonify({'players': []})
+    try:
+        from nba_api.stats.static import players as nba_players
+        all_p = nba_players.get_active_players()
+        results = []
+        # Priorité 1 : commence par la query
+        starts  = [p for p in all_p if p['full_name'].lower().startswith(q)]
+        # Priorité 2 : contient la query
+        contains = [p for p in all_p if q in p['full_name'].lower() and p not in starts]
+        # Priorité 3 : tous les tokens présents (fautes de frappe légères)
+        tokens = q.split()
+        token_match = [
+            p for p in all_p
+            if all(t in p['full_name'].lower() for t in tokens)
+            and p not in starts and p not in contains
+        ]
+        for p in (starts + contains + token_match)[:10]:
+            results.append({'name': p['full_name'], 'id': p['id']})
+        return jsonify({'players': results})
+    except Exception as e:
+        return jsonify({'players': [], 'error': str(e)})
+
+
 @app.route('/api/health', methods=['GET'])
 def health_check():
     return jsonify({
