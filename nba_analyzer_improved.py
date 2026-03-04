@@ -9,6 +9,8 @@ Le backtest est dans nba_analyzer_backtest.py
 import os
 import json
 import random
+import threading
+import uuid
 from flask import Flask, request, jsonify
 from flask_cors import CORS
 from datetime import datetime
@@ -232,6 +234,7 @@ def scan_by_type(stat_type, limit=25):
 # PLAYER HISTORY
 # ------------------------------------------------------------------
 
+
 @app.route('/api/player-history/<player_name>', methods=['GET'])
 def get_player_history(player_name):
     if not XGBOOST_AVAILABLE:
@@ -317,6 +320,89 @@ def search_players():
 
 
 CACHE_FILE = 'backtest_cache.json'
+
+# ── Jobs asynchrones ─────────────────────────────────────────
+# Stocke les jobs en mémoire: { job_id: { status, result } }
+_jobs = {}
+_jobs_lock = threading.Lock()
+
+def _run_backtest_job(job_id, player, stat_type, season, min_edge, stake):
+    """Lance le backtest dans un thread — met à jour _jobs quand terminé."""
+    try:
+        from nba_analyzer_backtest import run_walkforward
+        result = run_walkforward(player, stat_type, season, min_edge, stake)
+    except Exception as e:
+        result = {'status': 'ERROR', 'message': str(e)}
+
+    # Sauvegarde dans le cache si succès
+    if result.get('status') == 'SUCCESS' and result.get('total_bets', 0) >= 10:
+        cache = _load_cache()
+        key   = player.lower().replace(' ', '_')
+        if key not in cache:
+            cache[key] = {}
+        cache[key][stat_type] = {
+            'player':      player,
+            'stat_type':   stat_type,
+            'season':      result.get('season', season),
+            'win_rate':    result.get('win_rate', 0),
+            'total_bets':  result.get('total_bets', 0),
+            'roi':         result.get('roi', 0),
+            'verdict':     result.get('verdict_label', ''),
+            'verdict_color': result.get('verdict_color', 'grey'),
+            'avg_error':   result.get('avg_error', 0),
+            'updated_at':  datetime.utcnow().isoformat()
+        }
+        _save_cache(cache)
+
+    with _jobs_lock:
+        _jobs[job_id] = {'status': 'done', 'result': result}
+
+@app.route('/api/backtest/async', methods=['POST'])
+def start_backtest_async():
+    """
+    Lance un backtest en arrière-plan, retourne immédiatement un job_id.
+    Le client poll /api/backtest/status/<job_id> pour savoir si c'est prêt.
+    """
+    data      = request.get_json() or {}
+    player    = data.get('player', '')
+    stat_type = data.get('stat_type', 'points')
+    season    = data.get('season', '2023-24')
+    min_edge  = float(data.get('min_edge', 5.0))
+    stake     = float(data.get('stake', 50.0))
+
+    if not player:
+        return jsonify({'status': 'ERROR', 'message': 'player requis'}), 400
+
+    # Vérifie si déjà en cache
+    cache = _load_cache()
+    key   = player.lower().replace(' ', '_')
+    if cache.get(key, {}).get(stat_type, {}).get('total_bets', 0) >= 10:
+        return jsonify({'status': 'cached', 'job_id': None, 'data': cache[key][stat_type]})
+
+    job_id = str(uuid.uuid4())[:8]
+    with _jobs_lock:
+        _jobs[job_id] = {'status': 'running'}
+
+    t = threading.Thread(
+        target=_run_backtest_job,
+        args=(job_id, player, stat_type, season, min_edge, stake),
+        daemon=True
+    )
+    t.start()
+
+    print(f"Async backtest started: {player} / {stat_type} → job {job_id}")
+    return jsonify({'status': 'started', 'job_id': job_id})
+
+@app.route('/api/backtest/status/<job_id>', methods=['GET'])
+def backtest_status(job_id):
+    """Poll: retourne 'running' ou 'done' + résultat."""
+    with _jobs_lock:
+        job = _jobs.get(job_id)
+    if not job:
+        return jsonify({'status': 'not_found'}), 404
+    return jsonify(job)
+
+
 
 def _load_cache():
     try:
