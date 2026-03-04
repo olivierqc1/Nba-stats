@@ -194,11 +194,10 @@ def _run_walkforward(player_name, stat_type, season, min_edge, stake, collector)
             skipped_rmse += 1
             continue
 
-        # FILTRE line_value
-        lv = _line_value(df_train[target_col].values, line)
-        if lv < LINE_VALUE_MIN:
-            skipped_lv += 1
-            continue
+        # NOTE: line_value NON appliqué en backtest — les lignes sont simulées
+        # à partir de la moyenne récente, donc line_value serait circulaire.
+        # Ce filtre s'applique uniquement en LIVE sur les vraies lignes des books.
+        lv = _line_value(df_train[target_col].values, line)  # calculé pour affichage seulement
 
         # SANITY CHECK: prédiction trop loin de la ligne = modèle déréglé
         pred_ratio = prediction / line if line > 0 else 1.0
