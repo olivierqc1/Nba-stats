@@ -9,31 +9,23 @@
   body {
     font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    min-height: 100vh; padding: 20px;
-    color: #1a1a2e;
+    min-height: 100vh; padding: 20px; color: #1a1a2e;
   }
   .container { max-width: 480px; margin: 0 auto; }
-
-  .header {
-    text-align: center; margin-bottom: 24px;
-  }
+  .header { text-align: center; margin-bottom: 24px; }
   .header h1 { font-size: 1.8rem; color: white; font-weight: 700; }
   .header p  { color: rgba(255,255,255,0.8); margin-top: 4px; font-size: 0.9rem; }
   .back-btn {
     display: inline-block; margin-bottom: 16px;
     background: rgba(255,255,255,0.2); color: white;
     padding: 8px 16px; border-radius: 20px; text-decoration: none;
-    font-size: 0.85rem; backdrop-filter: blur(10px);
+    font-size: 0.85rem;
   }
-
   .card {
-    background: white; border-radius: 20px;
-    padding: 24px; margin-bottom: 20px;
-    box-shadow: 0 10px 40px rgba(0,0,0,0.15);
+    background: white; border-radius: 20px; padding: 24px;
+    margin-bottom: 20px; box-shadow: 0 10px 40px rgba(0,0,0,0.15);
   }
-  .card h2 { font-size: 1.1rem; font-weight: 700; margin-bottom: 20px; display: flex; align-items: center; gap: 8px; }
-
-  /* Form */
+  .card h2 { font-size: 1.1rem; font-weight: 700; margin-bottom: 20px; }
   .form-group { margin-bottom: 18px; }
   label { display: block; font-size: 0.85rem; font-weight: 600; color: #555; margin-bottom: 6px; }
 
@@ -42,84 +34,66 @@
   .autocomplete-wrapper input {
     width: 100%; padding: 12px 16px;
     border: 2px solid #e5e7eb; border-radius: 12px;
-    font-size: 1rem; outline: none; transition: border-color 0.2s;
-    background: #f9fafb;
+    font-size: 1rem; outline: none; background: #f9fafb;
+    transition: border-color 0.2s;
   }
   .autocomplete-wrapper input:focus { border-color: #7c3aed; background: white; }
-
   .suggestions-list {
     position: absolute; top: calc(100% + 4px); left: 0; right: 0;
     background: white; border: 2px solid #e5e7eb; border-radius: 12px;
     box-shadow: 0 8px 24px rgba(0,0,0,0.12);
-    z-index: 100; max-height: 240px; overflow-y: auto;
-    display: none;
+    z-index: 100; max-height: 220px; overflow-y: auto; display: none;
   }
   .suggestions-list.visible { display: block; }
   .suggestion-item {
-    padding: 12px 16px; cursor: pointer;
-    font-size: 0.95rem; transition: background 0.15s;
-    border-bottom: 1px solid #f3f4f6;
-    display: flex; align-items: center; gap: 10px;
+    padding: 12px 16px; cursor: pointer; font-size: 0.95rem;
+    border-bottom: 1px solid #f3f4f6; display: flex; align-items: center; gap: 10px;
+    transition: background 0.1s;
   }
   .suggestion-item:last-child { border-bottom: none; }
-  .suggestion-item:hover, .suggestion-item.selected { background: #f3e8ff; color: #7c3aed; }
-  .suggestion-item .icon { font-size: 1.1rem; }
-  .suggestion-item .name { font-weight: 600; }
-  .searching-indicator {
-    padding: 12px 16px; color: #9ca3af;
-    font-size: 0.85rem; font-style: italic;
-  }
-  .no-results {
-    padding: 12px 16px; color: #ef4444;
-    font-size: 0.85rem;
-  }
+  .suggestion-item:hover, .suggestion-item.active { background: #f3e8ff; }
+  .suggestion-item strong { color: #7c3aed; }
+  .no-results { padding: 12px 16px; color: #9ca3af; font-size: 0.85rem; }
 
-  select, .stake-input {
-    width: 100%; padding: 12px 16px;
-    border: 2px solid #e5e7eb; border-radius: 12px;
-    font-size: 1rem; outline: none; background: #f9fafb;
-    appearance: none; cursor: pointer; transition: border-color 0.2s;
-  }
-  select:focus, .stake-input:focus { border-color: #7c3aed; background: white; }
   .select-wrapper { position: relative; }
   .select-wrapper::after {
     content: '▼'; position: absolute; right: 14px; top: 50%;
-    transform: translateY(-50%); pointer-events: none;
-    color: #9ca3af; font-size: 0.7rem;
+    transform: translateY(-50%); pointer-events: none; color: #9ca3af; font-size: 0.7rem;
   }
+  select, .stake-input {
+    width: 100%; padding: 12px 16px; border: 2px solid #e5e7eb; border-radius: 12px;
+    font-size: 1rem; outline: none; background: #f9fafb; appearance: none;
+    transition: border-color 0.2s;
+  }
+  select:focus, .stake-input:focus { border-color: #7c3aed; background: white; }
 
   .btn-launch {
     width: 100%; padding: 16px;
     background: linear-gradient(135deg, #7c3aed, #4f46e5);
     color: white; border: none; border-radius: 14px;
     font-size: 1.1rem; font-weight: 700; cursor: pointer;
-    transition: opacity 0.2s, transform 0.1s;
-    margin-top: 4px;
+    transition: opacity 0.2s; margin-top: 4px;
   }
-  .btn-launch:hover:not(:disabled) { opacity: 0.9; transform: translateY(-1px); }
-  .btn-launch:disabled { opacity: 0.5; cursor: not-allowed; }
+  .btn-launch:disabled { opacity: 0.4; cursor: not-allowed; }
   .timer-note { text-align: center; font-size: 0.8rem; color: #9ca3af; margin-top: 8px; }
 
-  /* Loading */
-  .loading {
-    text-align: center; padding: 32px 0; display: none;
-  }
+  .loading { text-align: center; padding: 32px 0; display: none; }
   .spinner {
     width: 48px; height: 48px; margin: 0 auto 16px;
-    border: 4px solid #e5e7eb;
-    border-top: 4px solid #7c3aed;
+    border: 4px solid #e5e7eb; border-top: 4px solid #7c3aed;
     border-radius: 50%; animation: spin 0.8s linear infinite;
   }
   @keyframes spin { to { transform: rotate(360deg); } }
-  .loading p { color: #6b7280; font-size: 0.9rem; }
-  .loading .player-loading { font-weight: 700; color: #7c3aed; margin-top: 4px; }
+  .loading-player { font-weight: 700; color: #7c3aed; margin-top: 4px; }
 
-  /* Results */
-  .result-card { display: none; }
-
-  .verdict-box {
-    padding: 20px; border-radius: 16px; text-align: center; margin-bottom: 20px;
+  .error-box {
+    background: #fee2e2; border: 2px solid #ef4444; border-radius: 16px;
+    padding: 20px; text-align: center; display: none; margin-bottom: 16px;
   }
+  .error-box p { color: #991b1b; font-size: 0.9rem; font-weight: 500; }
+
+  .result-card { display: none; }
+  .verdict-box { padding: 20px; border-radius: 16px; text-align: center; margin-bottom: 20px; }
   .verdict-box.green  { background: #d1fae5; border: 2px solid #10b981; }
   .verdict-box.yellow { background: #fef3c7; border: 2px solid #f59e0b; }
   .verdict-box.red    { background: #fee2e2; border: 2px solid #ef4444; }
@@ -128,10 +102,8 @@
   .verdict-msg   { font-size: 0.85rem; color: #374151; line-height: 1.4; }
 
   .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; }
-  .stat-box {
-    background: #f9fafb; border-radius: 14px; padding: 16px; text-align: center;
-  }
-  .stat-label { font-size: 0.75rem; color: #9ca3af; margin-bottom: 6px; font-weight: 500; }
+  .stat-box { background: #f9fafb; border-radius: 14px; padding: 16px; text-align: center; }
+  .stat-label { font-size: 0.75rem; color: #9ca3af; margin-bottom: 6px; }
   .stat-value { font-size: 1.6rem; font-weight: 800; color: #1f2937; }
   .stat-value.green  { color: #10b981; }
   .stat-value.red    { color: #ef4444; }
@@ -139,48 +111,28 @@
 
   .progress-wrap { margin-bottom: 20px; }
   .progress-labels { display: flex; justify-content: space-between; font-size: 0.8rem; color: #9ca3af; margin-bottom: 6px; }
-  .progress-bar-bg {
-    background: #e5e7eb; border-radius: 8px; height: 12px; overflow: hidden; position: relative;
-  }
-  .progress-bar-fill {
-    height: 100%; background: linear-gradient(90deg, #10b981, #34d399);
-    border-radius: 8px; transition: width 0.6s ease;
-  }
-  .breakeven-marker {
-    position: absolute; top: 0; bottom: 0; width: 2px; background: #374151;
-  }
-  .breakeven-label {
-    text-align: center; font-size: 0.75rem; color: #6b7280; margin-top: 4px;
-  }
+  .progress-bar-bg { background: #e5e7eb; border-radius: 8px; height: 12px; overflow: hidden; position: relative; }
+  .progress-bar-fill { height: 100%; background: linear-gradient(90deg, #10b981, #34d399); border-radius: 8px; transition: width 0.6s; }
+  .breakeven-marker { position: absolute; top: 0; bottom: 0; width: 2px; background: #374151; }
+  .breakeven-label { text-align: center; font-size: 0.75rem; color: #6b7280; margin-top: 4px; }
 
-  .skipped-info {
-    background: #f3f4f6; border-radius: 12px; padding: 14px;
-    font-size: 0.8rem; color: #6b7280; margin-bottom: 16px;
-  }
-  .skipped-info strong { color: #374151; }
-
-  .bets-title { font-size: 1rem; font-weight: 700; margin-bottom: 12px; display: flex; align-items: center; gap: 6px; }
-  .bet-item {
-    background: #f9fafb; border-radius: 12px; padding: 14px;
-    margin-bottom: 10px; border-left: 4px solid transparent;
-  }
+  .skipped-info { background: #f3f4f6; border-radius: 12px; padding: 14px; font-size: 0.8rem; color: #6b7280; margin-bottom: 16px; }
+  .bets-title { font-size: 1rem; font-weight: 700; margin-bottom: 12px; }
+  .bet-item { background: #f9fafb; border-radius: 12px; padding: 14px; margin-bottom: 10px; border-left: 4px solid transparent; }
   .bet-item.won  { border-left-color: #10b981; background: #f0fdf4; }
   .bet-item.lost { border-left-color: #ef4444; background: #fef2f2; }
-  .bet-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+  .bet-top { display: flex; justify-content: space-between; margin-bottom: 4px; }
   .bet-rec { font-weight: 700; font-size: 0.9rem; }
   .bet-profit { font-weight: 700; font-size: 0.95rem; }
   .bet-profit.pos { color: #10b981; }
   .bet-profit.neg { color: #ef4444; }
   .bet-details { font-size: 0.78rem; color: #6b7280; }
   .bet-date    { font-size: 0.72rem; color: #9ca3af; margin-top: 2px; }
-
-  /* Error */
-  .error-box {
-    background: #fee2e2; border: 2px solid #ef4444; border-radius: 16px;
-    padding: 20px; text-align: center; display: none;
+  .reset-btn {
+    width: 100%; margin-top: 16px; padding: 14px; background: #f3f4f6;
+    border: none; border-radius: 12px; font-size: 0.95rem; font-weight: 600;
+    color: #374151; cursor: pointer;
   }
-  .error-box .icon { font-size: 2rem; margin-bottom: 8px; }
-  .error-box p { color: #991b1b; font-size: 0.9rem; font-weight: 500; }
 </style>
 </head>
 <body>
@@ -193,28 +145,20 @@
     <p>Validation historique — zéro data leakage</p>
   </div>
 
-  <!-- FORM CARD -->
   <div class="card" id="form-card">
     <h2>⚙️ Paramètres</h2>
 
-    <!-- JOUEUR AVEC AUTOCOMPLETE -->
     <div class="form-group">
-      <label for="player-input">Joueur NBA</label>
+      <label>Joueur NBA</label>
       <div class="autocomplete-wrapper">
-        <input
-          type="text"
-          id="player-input"
-          placeholder="Tape un nom (ex: Jalen, Curry...)"
-          autocomplete="off"
-          autocorrect="off"
-          autocapitalize="off"
-          spellcheck="false"
-        />
+        <input type="text" id="player-input"
+          placeholder="Tape un nom (ex: Curry, Jalen...)"
+          autocomplete="off" autocorrect="off"
+          autocapitalize="words" spellcheck="false" />
         <div class="suggestions-list" id="suggestions-list"></div>
       </div>
     </div>
 
-    <!-- STAT -->
     <div class="form-group">
       <label>Statistique</label>
       <div class="select-wrapper">
@@ -227,7 +171,6 @@
       </div>
     </div>
 
-    <!-- SAISON -->
     <div class="form-group">
       <label>Saison à tester</label>
       <div class="select-wrapper">
@@ -239,7 +182,6 @@
       </div>
     </div>
 
-    <!-- EDGE -->
     <div class="form-group">
       <label>Edge minimum pour parier (%)</label>
       <div class="select-wrapper">
@@ -253,7 +195,6 @@
       </div>
     </div>
 
-    <!-- MISE -->
     <div class="form-group">
       <label>Mise par pari (€)</label>
       <input type="number" class="stake-input" id="stake" value="50" min="1" max="500" />
@@ -265,34 +206,29 @@
     <p class="timer-note">⏱ Durée estimée: 3–8 minutes selon le joueur</p>
   </div>
 
-  <!-- LOADING -->
   <div class="loading" id="loading">
     <div class="spinner"></div>
     <p>Analyse en cours...</p>
-    <p class="player-loading" id="loading-player"></p>
+    <p class="loading-player" id="loading-player"></p>
     <p style="font-size:0.8rem;color:#9ca3af;margin-top:8px;">Walk-forward sur toute la saison</p>
   </div>
 
-  <!-- ERROR -->
   <div class="error-box" id="error-box">
-    <div class="icon">❌</div>
     <p id="error-msg"></p>
   </div>
 
-  <!-- RESULTS -->
   <div class="result-card" id="result-card"></div>
-
 </div>
 
 <script>
+// -------------------------------------------------------
+// LISTE LOCALE — 530 joueurs actifs NBA (pas de backend)
+// -------------------------------------------------------
+const NBA_PLAYERS = ["A.J. Lawson", "AJ Green", "AJ Johnson", "Aaron Gordon", "Aaron Holiday", "Aaron Nesmith", "Aaron Wiggins", "Ace Bailey", "Adem Bona", "Adou Thiero", "Ajay Mitchell", "Al Horford", "Alex Antetokounmpo", "Alex Caruso", "Alex Sarr", "Alex Toohey", "Alijah Martin", "Alperen Sengun", "Amari Williams", "Amen Thompson", "Amir Coffey", "Andre Drummond", "Andre Jackson Jr.", "Andrew Nembhard", "Andrew Wiggins", "Anfernee Simons", "Anthony Black", "Anthony Davis", "Anthony Edwards", "Anthony Gill", "Antonio Reeves", "Ariel Hukporti", "Asa Newell", "Ausar Thompson", "Austin Reaves", "Ayo Dosunmu", "Bam Adebayo", "Baylor Scheierman", "Ben Saraf", "Ben Sheppard", "Bennedict Mathurin", "Bilal Coulibaly", "Bismack Biyombo", "Blake Wesley", "Bobby Portis", "Bobi Klintman", "Bogdan Bogdanovi\u0107", "Bones Hyland", "Bradley Beal", "Branden Carlson", "Brandin Podziemski", "Brandon Clarke", "Brandon Ingram", "Brandon Miller", "Brandon Williams", "Brice Sensabaugh", "Bronny James", "Brook Lopez", "Brooks Barnhizer", "Bruce Brown", "Bryce McGowens", "Bub Carrington", "Buddy Hield", "CJ Huntley", "CJ McCollum", "Cade Cunningham", "Caleb Houstan", "Caleb Love", "Caleb Martin", "Cam Christie", "Cam Spencer", "Cam Thomas", "Cam Whitmore", "Cameron Johnson", "Caris LeVert", "Carter Bryant", "Cason Wallace", "Cedric Coward", "Charles Bassey", "Chaz Lanier", "Chet Holmgren", "Chris Boucher", "Chris Livingston", "Chris Ma\u00f1on", "Chris Paul", "Chris Youngblood", "Christian Braun", "Christian Koloko", "Chucky Hepburn", "Clint Capela", "Coby White", "Cody Martin", "Cody Williams", "Colby Jones", "Cole Anthony", "Colin Castleton", "Collin Gillespie", "Collin Murray-Boyles", "Collin Sexton", "Cooper Flagg", "Corey Kispert", "Craig Porter Jr.", "Curtis Jones", "D'Angelo Russell", "DaRon Holmes II", "Daeqwon Plowden", "Dalen Terry", "Dalton Knecht", "Damian Lillard", "Daniel Gafford", "Daniss Jenkins", "Danny Wolf", "Dant\u00e9 Exum", "Dario \u0160ari\u0107", "Darius Garland", "David Jones Garcia", "Davion Mitchell", "Day'Ron Sharpe", "De'Aaron Fox", "De'Andre Hunter", "De'Anthony Melton", "DeAndre Jordan", "DeMar DeRozan", "Dean Wade", "Deandre Ayton", "Dejounte Murray", "Deni Avdija", "Dennis Schr\u00f6der", "Dereck Lively II", "Derik Queen", "Derrick Jones Jr.", "Derrick White", "Desmond Bane", "Devin Booker", "Devin Carter", "Devin Vassell", "Dillon Brooks", "Domantas Sabonis", "Dominick Barlow", "Donovan Clingan", "Donovan Mitchell", "Donte DiVincenzo", "Dorian Finney-Smith", "Doug McDermott", "Drake Powell", "Draymond Green", "Drew Eubanks", "Drew Peterson", "Dru Smith", "Duncan Robinson", "Duop Reath", "Dwight Powell", "Dylan Cardwell", "Dylan Harper", "Dyson Daniels", "E.J. Liddell", "Egor D\u00ebmin", "Eli John Ndiaye", "Elijah Harkless", "Emanuel Miller", "Enrique Freeman", "Eric Gordon", "Evan Mobley", "Franz Wagner", "Fred VanVleet", "GG Jackson", "Gabe Vincent", "Garrett Temple", "Gary Harris", "Gary Payton II", "Gary Trent Jr.", "Georges Niang", "Giannis Antetokounmpo", "Goga Bitadze", "Gradey Dick", "Grant Williams", "Grayson Allen", "Guerschon Yabusele", "Gui Santos", "Harrison Barnes", "Harrison Ingram", "Haywood Highsmith", "Herbert Jones", "Hugo Gonz\u00e1lez", "Hunter Dickinson", "Hunter Sallis", "Hunter Tyson", "Immanuel Quickley", "Isaac Jones", "Isaac Okoro", "Isaiah Collier", "Isaiah Crawford", "Isaiah Hartenstein", "Isaiah Jackson", "Isaiah Joe", "Isaiah Livers", "Isaiah Stevens", "Isaiah Stewart", "Ivica Zubac", "JD Davison", "Ja Morant", "Ja'Kobe Walter", "Jabari Smith Jr.", "Jabari Walker", "Jackson Rowe", "Jacob Toppin", "Jaden Hardy", "Jaden Ivey", "Jaden McDaniels", "Jae'Sean Tate", "Jahmir Young", "Jahmyl Telfort", "Jaime Jaquez Jr.", "Jake LaRavia", "Jakob Poeltl", "Jalen Brunson", "Jalen Duren", "Jalen Green", "Jalen Johnson", "Jalen Pickett", "Jalen Smith", "Jalen Suggs", "Jalen Williams", "Jalen Wilson", "Jamal Cain", "Jamal Murray", "Jamal Shead", "James Harden", "James Wiseman", "Jamir Watkins", "Jamison Battle", "Jarace Walker", "Jared McCain", "Jaren Jackson Jr.", "Jarred Vanderbilt", "Jarrett Allen", "Jase Richardson", "Javon Small", "Javonte Cooke", "Javonte Green", "Jaxson Hayes", "Jay Huff", "Jaylen Brown", "Jaylen Clark", "Jaylen Wells", "Jaylin Williams", "Jaylon Tyson", "Jayson Tatum", "Jeff Green", "Jerami Grant", "Jeremiah Fears", "Jeremiah Robinson-Earl", "Jeremy Sochan", "Jericho Sims", "Jett Howard", "Jevon Carter", "Jimmy Butler III", "Joan Beringer", "Jock Landale", "Joe Ingles", "Joel Embiid", "John Collins", "John Konchar", "John Tonje", "Johni Broome", "Johnny Furphy", "Johnny Juzang", "Jonas Valan\u010di\u016bnas", "Jonathan Isaac", "Jonathan Kuminga", "Jonathan Mogbo", "Jordan Clarkson", "Jordan Goodwin", "Jordan Hawkins", "Jordan McLaughlin", "Jordan Miller", "Jordan Poole", "Jordan Walsh", "Jose Alvarado", "Josh Giddey", "Josh Green", "Josh Hart", "Josh Minott", "Josh Okogie", "Jrue Holiday", "Julian Champagnie", "Julian Phillips", "Julian Strawther", "Julius Randle", "Justin Champagnie", "Justin Edwards", "Jusuf Nurki\u0107", "KJ Simpson", "Kam Jones", "Karl-Anthony Towns", "Karlo Matkovi\u0107", "Kasparas Jaku\u010dionis", "Kawhi Leonard", "Keaton Wallace", "Keegan Murray", "Kel'el Ware", "Keldon Johnson", "Kelly Olynyk", "Kelly Oubre Jr.", "Kenrich Williams", "Kentavious Caldwell-Pope", "Keon Ellis", "Keshad Johnson", "Kevin Durant", "Kevin Huerter", "Kevin Love", "Kevin McCullar Jr.", "Kevin Porter Jr.", "Kevon Harris", "Kevon Looney", "Keyonte George", "Khaman Maluach", "Khris Middleton", "Klay Thompson", "Kobe Brown", "Kobe Sanders", "Koby Brea", "Kon Knueppel", "Kris Dunn", "Kris Murray", "Kristaps Porzi\u0146\u0123is", "Kyle Anderson", "Kyle Filipowski", "Kyle Kuzma", "Kyle Lowry", "Kyrie Irving", "Kyshawn George", "LaMelo Ball", "Lachlan Olbrich", "Landry Shamet", "Larry Nance Jr.", "Lauri Markkanen", "LeBron James", "Leonard Miller", "Liam McNeeley", "Lindy Waters III", "Lonzo Ball", "Luguentz Dort", "Luka Don\u010di\u0107", "Luka Garza", "Luke Kennard", "Luke Kornet", "Luke Travers", "Mac McClung", "Malaki Branham", "Malik Monk", "Marcus Sasser", "Marcus Smart", "Mark Sears", "Mark Williams", "Marvin Bagley III", "Mason Plumlee", "Matas Buzelis", "Matisse Thybulle", "Max Christie", "Max Shulga", "Max Strus", "Maxi Kleber", "Maxime Raynaud", "Micah Peavy", "Michael Porter Jr.", "Mikal Bridges", "Mike Conley", "Miles Bridges", "Miles Kelly", "Miles McBride", "Mitchell Robinson", "Mohamed Diawara", "Mont\u00e9 Morris", "Moritz Wagner", "Moses Moody", "Mouhamed Gueye", "Moussa Cisse", "Moussa Diabat\u00e9", "Myles Turner", "Myron Gardner", "N'Faly Dante", "Nae'Qwan Tomlin", "Naji Marshall", "Naz Reid", "Neemias Queta", "Nic Claxton", "Nick Richards", "Nick Smith Jr.", "Nickeil Alexander-Walker", "Nicolas Batum", "Nigel Hayes-Davis", "Nikola Joki\u0107", "Nikola Jovi\u0107", "Nikola Topi\u0107", "Nikola Vu\u010devi\u0107", "Nikola \u0110uri\u0161i\u0107", "Nique Clifford", "Noa Essengue", "Noah Clowney", "Noah Penda", "Nolan Traore", "Norman Powell", "OG Anunoby", "Obi Toppin", "Ochai Agbaji", "Olivier-Maxence Prosper", "Onyeka Okongwu", "Orlando Robinson", "Oscar Tshiebwe", "Oso Ighodaro", "Ousmane Dieng", "P.J. Washington", "PJ Hall", "Pac\u00f4me Dadiet", "Paolo Banchero", "Pascal Siakam", "Pat Connaughton", "Pat Spencer", "Patrick Williams", "Paul George", "Paul Reed", "Payton Pritchard", "Pelle Larsson", "Pete Nance", "Peyton Watson", "Precious Achiuwa", "Quentin Grimes", "Quenton Jackson", "Quinten Post", "RJ Barrett", "Rasheer Fleming", "RayJ Dennis", "Rayan Rupert", "Reed Sheppard", "Riley Minix", "Rob Dillingham", "Robert Williams III", "Rocco Zikarsky", "Ron Harper Jr.", "Ronald Holland II", "Royce O'Neale", "Rudy Gobert", "Rui Hachimura", "Russell Westbrook", "Ryan Dunn", "Ryan Kalkbrenner", "Ryan Nembhard", "Ryan Rollins", "Saddiq Bey", "Sam Hauser", "Sam Merrill", "Sandro Mamukelashvili", "Santi Aldama", "Scoot Henderson", "Scottie Barnes", "Scotty Pippen Jr.", "Shaedon Sharpe", "Shai Gilgeous-Alexander", "Sharife Cooper", "Sidy Cissoko", "Simone Fontecchio", "Sion James", "Spencer Jones", "Stephen Curry", "Stephon Castle", "Steven Adams", "Svi Mykhailiuk", "T.J. McConnell", "Taelon Peter", "Tamar Bates", "Tari Eason", "Taurean Prince", "Taylor Hendricks", "Terance Mann", "Terrence Shannon Jr.", "Terry Rozier", "Thanasis Antetokounmpo", "Thomas Bryant", "Thomas Sorber", "Tidjane Sala\u00fcn", "Tim Hardaway Jr.", "Tobias Harris", "Tolu Smith", "Tony Bradley", "Tosan Evbuomwan", "Toumani Camara", "Trae Young", "Trayce Jackson-Davis", "Tre Johnson", "Tre Jones", "Tre Mann", "Trendon Watford", "Trentyn Flowers", "Trey Alexander", "Trey Jemison III", "Trey Murphy III", "Tristan Vukcevic", "Tristan da Silva", "Ty Jerome", "Tyler Herro", "Tyler Kolek", "Tyrese Haliburton", "Tyrese Martin", "Tyrese Maxey", "Tyrese Proctor", "Tyson Etienne", "Tyus Jones", "VJ Edgecombe", "Victor Wembanyama", "Vince Williams Jr.", "Vladislav Goldin", "V\u00edt Krej\u010d\u00ed", "Walker Kessler", "Walter Clayton Jr.", "Wendell Carter Jr.", "Wendell Moore Jr.", "Will Richard", "Will Riley", "Xavier Tillman", "Yang Hansen", "Yanic Konan Niederh\u00e4user", "Yves Missi", "Zaccharie Risacher", "Zach Collins", "Zach Edey", "Zach LaVine", "Zeke Nnaji", "Ziaire Williams", "Zion Williamson"];
+
 const BACKEND = 'https://nba-analyzer-backend.onrender.com';
 let selectedPlayer = '';
-let searchTimeout  = null;
-let selectedIndex  = -1;
-
-// -------------------------------------------------------
-// AUTOCOMPLETE
-// -------------------------------------------------------
+let activeIndex    = -1;
 
 const playerInput   = document.getElementById('player-input');
 const suggestionBox = document.getElementById('suggestions-list');
@@ -302,252 +238,22 @@ playerInput.addEventListener('input', () => {
   const q = playerInput.value.trim();
   selectedPlayer = '';
   launchBtn.disabled = true;
-  clearTimeout(searchTimeout);
+  activeIndex = -1;
 
-  if (q.length < 2) {
-    hideSuggestions();
-    return;
-  }
-  // Debounce 300ms
-  searchTimeout = setTimeout(() => fetchSuggestions(q), 300);
-});
+  if (q.length < 2) { hideSuggestions(); return; }
 
-playerInput.addEventListener('keydown', (e) => {
-  const items = suggestionBox.querySelectorAll('.suggestion-item');
-  if (!items.length) return;
-  if (e.key === 'ArrowDown') {
-    e.preventDefault();
-    selectedIndex = Math.min(selectedIndex + 1, items.length - 1);
-    updateSelected(items);
-  } else if (e.key === 'ArrowUp') {
-    e.preventDefault();
-    selectedIndex = Math.max(selectedIndex - 1, 0);
-    updateSelected(items);
-  } else if (e.key === 'Enter' && selectedIndex >= 0) {
-    e.preventDefault();
-    items[selectedIndex].click();
-  } else if (e.key === 'Escape') {
-    hideSuggestions();
-  }
-});
-
-document.addEventListener('click', (e) => {
-  if (!e.target.closest('.autocomplete-wrapper')) hideSuggestions();
-});
-
-function updateSelected(items) {
-  items.forEach((el, i) => el.classList.toggle('selected', i === selectedIndex));
-}
-
-async function fetchSuggestions(q) {
-  suggestionBox.innerHTML = '<div class="searching-indicator">🔍 Recherche...</div>';
-  suggestionBox.classList.add('visible');
-
-  try {
-    const res  = await fetch(`${BACKEND}/api/players/search?q=${encodeURIComponent(q)}`);
-    const data = await res.json();
-    renderSuggestions(data.players || []);
-  } catch (err) {
-    suggestionBox.innerHTML = '<div class="no-results">Erreur de connexion au serveur</div>';
-  }
-}
-
-function renderSuggestions(players) {
-  selectedIndex = -1;
-  if (!players.length) {
-    suggestionBox.innerHTML = '<div class="no-results">Aucun joueur trouvé</div>';
-    return;
-  }
-  suggestionBox.innerHTML = players.map(p => `
-    <div class="suggestion-item" onclick="selectPlayer('${p.name.replace(/'/g, "\\'")}')">
-      <span class="icon">🏀</span>
-      <span class="name">${highlightMatch(p.name, playerInput.value.trim())}</span>
-    </div>
-  `).join('');
-}
-
-function highlightMatch(name, query) {
-  if (!query) return name;
-  const idx = name.toLowerCase().indexOf(query.toLowerCase());
-  if (idx === -1) return name;
-  return name.slice(0, idx)
-    + `<strong>${name.slice(idx, idx + query.length)}</strong>`
-    + name.slice(idx + query.length);
-}
-
-function selectPlayer(name) {
-  selectedPlayer    = name;
-  playerInput.value = name;
-  launchBtn.disabled = false;
-  hideSuggestions();
-}
-
-function hideSuggestions() {
-  suggestionBox.classList.remove('visible');
-  suggestionBox.innerHTML = '';
-  selectedIndex = -1;
-}
-
-// -------------------------------------------------------
-// BACKTEST
-// -------------------------------------------------------
-
-async function launchBacktest() {
-  if (!selectedPlayer) {
-    alert('Sélectionne un joueur dans la liste de suggestions.');
-    return;
-  }
-
-  const statType = document.getElementById('stat-type').value;
-  const season   = document.getElementById('season').value;
-  const minEdge  = parseFloat(document.getElementById('min-edge').value);
-  const stake    = parseFloat(document.getElementById('stake').value);
-
-  document.getElementById('form-card').style.display  = 'none';
-  document.getElementById('loading').style.display    = 'block';
-  document.getElementById('error-box').style.display  = 'none';
-  document.getElementById('result-card').style.display = 'none';
-  document.getElementById('loading-player').textContent = selectedPlayer + ' — ' + statType;
-
-  try {
-    const res  = await fetch(`${BACKEND}/api/backtest`, {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({
-        player: selectedPlayer, stat_type: statType,
-        season, min_edge: minEdge, stake
+  const ql = q.toLowerCase();
+  // Priorité 1: commence par la query
+  const starts   = NBA_PLAYERS.filter(n => n.toLowerCase().startsWith(ql));
+  // Priorité 2: contient la query
+  const contains = NBA_PLAYERS.filter(n => n.toLowerCase().includes(ql) && !n.toLowerCase().startsWith(ql));
+  // Priorité 3: tous les mots présents (fautes de frappe légères)
+  const tokens   = ql.split(/\s+/).filter(Boolean);
+  const tokenMatch = tokens.length > 1
+    ? NBA_PLAYERS.filter(n => {
+        const nl = n.toLowerCase();
+        return tokens.every(t => nl.includes(t)) && !nl.includes(ql);
       })
-    });
-    const data = await res.json();
-    document.getElementById('loading').style.display = 'none';
+    : [];
 
-    if (data.status === 'ERROR' || data.status === 'NO_BETS') {
-      showError(data.message || 'Erreur inconnue');
-    } else {
-      showResults(data, stake);
-    }
-  } catch (err) {
-    document.getElementById('loading').style.display = 'none';
-    showError('Impossible de contacter le serveur. Vérifie ta connexion.');
-  }
-}
-
-function showError(msg) {
-  const box = document.getElementById('error-box');
-  document.getElementById('error-msg').textContent = msg;
-  box.style.display = 'block';
-  document.getElementById('form-card').style.display = 'block';
-}
-
-function showResults(data, stake) {
-  const rc = document.getElementById('result-card');
-  rc.style.display = 'block';
-
-  const wr      = data.win_rate;
-  const profit  = data.total_profit;
-  const roi     = data.roi;
-  const color   = data.verdict_color || 'green';
-
-  // Couleur win rate
-  const wrColor = wr >= 58 ? 'green' : wr >= 52.38 ? 'orange' : 'red';
-  const prColor = profit >= 0 ? 'green' : 'red';
-
-  // Pourcentage barre (0-100 entre 45% et 70%)
-  const barPct = Math.min(100, Math.max(0, ((wr - 45) / 25) * 100));
-  const bePct  = ((52.38 - 45) / 25) * 100;
-
-  // Paris skippés
-  const skippedHtml = (data.skipped_dnp || data.skipped_rmse || data.skipped_line_value || data.skipped_sanity) ? `
-    <div class="skipped-info">
-      <strong>Paris filtrés (non comptabilisés):</strong><br>
-      ${data.skipped_dnp       ? `DNP/&lt;20min: <strong>${data.skipped_dnp}</strong> &nbsp;` : ''}
-      ${data.skipped_rmse      ? `RMSE élevé: <strong>${data.skipped_rmse}</strong> &nbsp;` : ''}
-      ${data.skipped_line_value ? `Line value: <strong>${data.skipped_line_value}</strong> &nbsp;` : ''}
-      ${data.skipped_sanity    ? `Sanity check: <strong>${data.skipped_sanity}</strong>` : ''}
-    </div>` : '';
-
-  // Liste des paris
-  const betsHtml = (data.bets || []).map(b => `
-    <div class="bet-item ${b.won ? 'won' : 'lost'}">
-      <div class="bet-top">
-        <span class="bet-rec">${b.recommendation} ${b.line}</span>
-        <span class="bet-profit ${b.won ? 'pos' : 'neg'}">${b.won ? '+' : ''}${b.profit}€</span>
-      </div>
-      <div class="bet-details">Préd: <strong>${b.prediction}</strong> | Réel: <strong>${b.actual}</strong> | Edge: ${b.edge}% | LV: ${b.line_value}</div>
-      <div class="bet-date">${b.date}</div>
-    </div>`).join('');
-
-  rc.innerHTML = `
-    <div class="card">
-      <h2>📊 Résultats — ${data.player}</h2>
-      <p style="font-size:0.8rem;color:#9ca3af;margin-top:-12px;margin-bottom:16px;">${data.stat_type} · ${data.season}</p>
-
-      <div class="verdict-box ${color}">
-        <div class="verdict-label">${data.verdict_label}</div>
-        <div class="verdict-msg">${data.verdict_msg}</div>
-      </div>
-
-      <div class="stats-grid">
-        <div class="stat-box">
-          <div class="stat-label">Paris effectués</div>
-          <div class="stat-value">${data.total_bets}</div>
-        </div>
-        <div class="stat-box">
-          <div class="stat-label">Win Rate</div>
-          <div class="stat-value ${wrColor}">${wr}%</div>
-        </div>
-        <div class="stat-box">
-          <div class="stat-label">Profit total</div>
-          <div class="stat-value ${prColor}">${profit >= 0 ? '+' : ''}${profit}€</div>
-        </div>
-        <div class="stat-box">
-          <div class="stat-label">ROI</div>
-          <div class="stat-value ${prColor}">${roi >= 0 ? '+' : ''}${roi}%</div>
-        </div>
-        <div class="stat-box">
-          <div class="stat-label">Victoires / Défaites</div>
-          <div class="stat-value">${data.wins}W — ${data.losses}L</div>
-        </div>
-        <div class="stat-box">
-          <div class="stat-label">Erreur moy. prédiction</div>
-          <div class="stat-value">${data.avg_error} pts</div>
-        </div>
-      </div>
-
-      <div class="progress-wrap">
-        <div class="progress-labels">
-          <span>Win Rate</span>
-          <span>Break-even: ${data.break_even}%</span>
-        </div>
-        <div class="progress-bar-bg">
-          <div class="progress-bar-fill" style="width:${barPct}%"></div>
-          <div class="breakeven-marker" style="left:${bePct}%"></div>
-        </div>
-        <div class="breakeven-label">▲ Break-even</div>
-      </div>
-
-      ${skippedHtml}
-
-      <div class="bets-title">📋 Derniers paris simulés</div>
-      ${betsHtml}
-
-      <button onclick="resetForm()" style="
-        width:100%;margin-top:16px;padding:14px;background:#f3f4f6;
-        border:none;border-radius:12px;font-size:0.95rem;font-weight:600;
-        color:#374151;cursor:pointer;">
-        ← Nouveau backtest
-      </button>
-    </div>`;
-}
-
-function resetForm() {
-  document.getElementById('result-card').style.display = 'none';
-  document.getElementById('error-box').style.display   = 'none';
-  document.getElementById('form-card').style.display   = 'block';
-  playerInput.value = '';
-  selectedPlayer    = '';
-  launchBtn.disabled = true;
-}
-</script>
-</body>
-</html>
+  const results 
