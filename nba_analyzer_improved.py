@@ -1,318 +1,302 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-NBA Analyzer - Fichier principal
-Endpoints: daily opportunities (4 types), player history, health, odds usage
-Le backtest est dans nba_analyzer_backtest.py
+NBA Analyzer - Module Backtest v3
+Corrections:
+- Filtre DNP explicite (réel == 0 → skip)
+- Sanity check: prédiction < 50% de la ligne → modèle invalide pour ce match
+- Intervalle de confiance clampé à 0 (pas de valeurs négatives)
+- line_value seuil à 0.2, min 30 paris pour verdict
+- Filtre RMSE/ligne < 40%
 """
 
-import os
 import random
-from flask import Flask, request, jsonify
-from flask_cors import CORS
-from datetime import datetime
 import numpy as np
+from flask import request, jsonify
+from scipy import stats as scipy_stats
 
-try:
-    from advanced_data_collector import AdvancedDataCollector
-    from xgboost_model import ModelManager
-    XGBOOST_AVAILABLE = True
-    print("XGBoost mode active")
-except ImportError as e:
-    print(f"XGBoost non disponible: {e}")
-    XGBOOST_AVAILABLE = False
+VIG_BREAK_EVEN   = 52.38
+ODDS             = -110
+MIN_TRAIN        = 20
+MIN_BETS_VERDICT = 30
+LINE_VALUE_MIN   = 0.2
+MAX_RMSE_RATIO   = 0.40
+# Sanity check: si prédiction < X% de la ligne → modèle déréglé pour ce joueur
+PRED_LINE_RATIO_MIN = 0.50   # prédiction doit être >= 50% de la ligne
+PRED_LINE_RATIO_MAX = 2.00   # prédiction doit être <= 200% de la ligne
 
-try:
-    from odds_api_client import OddsAPIClient
-    ODDS_API_AVAILABLE = True
-    odds_client = OddsAPIClient()
-except Exception as e:
-    print(f"Odds API non disponible: {e}")
-    ODDS_API_AVAILABLE = False
-    odds_client = None
+FEATURE_SETS = {
+    'points': [
+        'avg_pts_last_5', 'avg_pts_last_10', 'exp_avg_pts',
+        'recent_over_rate_pts', 'pts_momentum', 'pts_per_min',
+        'recent_trend_pts', 'opponent_def_rating', 'pace',
+        'home', 'rest_days', 'back_to_back',
+        'minutes_avg', 'minutes_consistency', 'usage_rate'
+    ],
+    'assists': [
+        'avg_ast_last_5', 'avg_ast_last_10', 'exp_avg_ast',
+        'recent_over_rate_ast', 'ast_momentum', 'ast_per_min',
+        'recent_trend_ast', 'opponent_def_rating', 'pace',
+        'home', 'rest_days', 'back_to_back',
+        'minutes_avg', 'minutes_consistency', 'usage_rate'
+    ],
+    'rebounds': [
+        'avg_reb_last_5', 'avg_reb_last_10', 'exp_avg_reb',
+        'recent_over_rate_reb', 'reb_momentum', 'reb_per_min',
+        'recent_trend_reb', 'opponent_def_rating', 'pace',
+        'home', 'rest_days', 'back_to_back',
+        'minutes_avg', 'minutes_consistency', 'usage_rate'
+    ],
+    '3pt': [
+        'avg_fg3m_last_5', 'avg_fg3m_last_10',
+        'recent_trend_fg3m', 'opponent_def_rating', 'pace',
+        'home', 'rest_days', 'back_to_back',
+        'minutes_avg', 'usage_rate'
+    ]
+}
 
-app = Flask(__name__)
-CORS(app)
-
-collector     = AdvancedDataCollector() if XGBOOST_AVAILABLE else None
-model_manager = ModelManager()          if XGBOOST_AVAILABLE else None
+STAT_COL = {'points': 'PTS', 'assists': 'AST', 'rebounds': 'REB', '3pt': 'FG3M'}
 
 
-# ------------------------------------------------------------------
-# HELPERS
-# ------------------------------------------------------------------
+def _simulate_line(historical_values):
+    if len(historical_values) < 3:
+        return None
+    recent  = historical_values[-10:]
+    weights = np.exp(np.linspace(0, 1, len(recent)))
+    avg     = np.average(recent, weights=weights / weights.sum())
+    noise   = random.choice([-0.5, 0, 0.5])
+    return round(avg * 2) / 2 + noise
 
-def analyze_betting_line(prediction, confidence_interval, line):
-    if line is None:
-        return {'recommendation': 'NO_LINE', 'bookmaker_line': None}
-    from scipy import stats
-    std  = max((confidence_interval['upper'] - confidence_interval['lower']) / 3.92, 1.0)
-    z    = (line - prediction) / std
-    op   = (1 - stats.norm.cdf(z)) * 100
-    up   = 100 - op
-    if op > 52.4:
-        edge, rec, bp = op - 52.4, 'OVER',  op
-    elif up > 52.4:
-        edge, rec, bp = up - 52.4, 'UNDER', up
-    else:
-        edge, rec, bp = 0, 'SKIP', max(op, up)
-    kelly = max(min((bp / 100 - (1 - bp / 100)) * 100, 10), 0) if edge > 5 else 0
+
+def _line_value(historical_series, line):
+    if len(historical_series) < 5:
+        return 0.0
+    avg5  = float(np.mean(historical_series[-5:]))
+    avg10 = float(np.mean(historical_series[-10:])) if len(historical_series) >= 10 else avg5
+    wtd   = avg5 * 0.7 + avg10 * 0.3
+    std   = float(np.std(historical_series[-15:])) if len(historical_series) >= 15 else float(np.std(historical_series))
+    return abs(wtd - line) / std if std > 0.5 else 0.0
+
+
+def _verdict(total_bets, win_rate):
+    if total_bets < MIN_BETS_VERDICT:
+        return {
+            'verdict':       'INSUFFICIENT_SAMPLE',
+            'verdict_label': '⚠️ Échantillon insuffisant',
+            'verdict_msg':   f'Seulement {total_bets} paris simulés — besoin de {MIN_BETS_VERDICT} minimum. Essaie la saison 2023-24 ou baisse min_edge.',
+            'verdict_color': 'orange'
+        }
+    if win_rate >= 58.0:
+        return {
+            'verdict':       'STRONG_EDGE',
+            'verdict_label': '✅ Edge solide — Continue à parier',
+            'verdict_msg':   f'Win rate {win_rate}% bien au-dessus du break-even de 52.4% sur {total_bets} paris.',
+            'verdict_color': 'green'
+        }
+    if win_rate >= 54.0:
+        return {
+            'verdict':       'MARGINAL_EDGE',
+            'verdict_label': '⚡ Edge marginal — Prudence',
+            'verdict_msg':   f'Win rate {win_rate}% légèrement au-dessus du break-even. Augmente les filtres.',
+            'verdict_color': 'yellow'
+        }
+    if win_rate >= 52.38:
+        return {
+            'verdict':       'NO_EDGE',
+            'verdict_label': '❌ Pas d\'edge réel',
+            'verdict_msg':   f'Win rate {win_rate}% trop proche du break-even 52.4%.',
+            'verdict_color': 'red'
+        }
     return {
-        'recommendation':    rec,
-        'bookmaker_line':    line,
-        'over_probability':  round(op,    1),
-        'under_probability': round(up,    1),
-        'edge':              round(edge,  1),
-        'kelly_criterion':   round(kelly, 1),
-        'bet_confidence':    'HIGH' if edge >= 10 else 'MEDIUM' if edge >= 5 else 'LOW'
+        'verdict':       'LOSING',
+        'verdict_label': '🔴 Modèle perdant',
+        'verdict_msg':   f'Win rate {win_rate}% sous le break-even. Stop parier sur ce profil.',
+        'verdict_color': 'red'
     }
 
 
-def analyze_with_xgboost(player, opponent, is_home, stat_type, line):
-    features = collector.prepare_features_for_prediction(player, opponent, is_home)
-    if features is None:
-        return {'status': 'ERROR', 'error': 'Unable to collect data'}
-    try:
-        pred_result = model_manager.predict(player, stat_type, opponent, is_home)
-    except Exception as e:
-        return {'status': 'ERROR', 'error': str(e)}
-    if pred_result.get('prediction') is None:
-        return {'status': 'ERROR', 'error': pred_result.get('error', 'Unknown')}
+def _run_walkforward(player_name, stat_type, season, min_edge, stake, collector):
+    import xgboost as xgb
+    from sklearn.metrics import r2_score, mean_squared_error as mse_fn
 
-    prediction = pred_result['prediction']
-    ci         = pred_result['confidence_interval']
+    target_col = STAT_COL.get(stat_type, 'PTS')
+    df = collector.get_complete_player_data(player_name, season)
 
-    line_value = 0.0
-    if line is not None:
+    if df is None or len(df) < MIN_TRAIN + 10:
+        n = len(df) if df is not None else 0
+        return {
+            'status':  'ERROR',
+            'message': f'Pas assez de données ({n} matchs, besoin de {MIN_TRAIN + 10}). Essaie la saison 2023-24.'
+        }
+
+    df = df.sort_values('GAME_DATE', ascending=True).reset_index(drop=True)
+
+    feat_cols = [f for f in FEATURE_SETS.get(stat_type, FEATURE_SETS['points']) if f in df.columns]
+    if len(feat_cols) < 5:
+        return {'status': 'ERROR', 'message': f'Pas assez de features ({len(feat_cols)})'}
+
+    random.seed(42); np.random.seed(42)
+
+    bets              = []
+    all_errors        = []
+    skipped_dnp       = 0   # DNP / joueur absent
+    skipped_rmse      = 0   # RMSE trop élevé vs ligne
+    skipped_lv        = 0   # line_value trop faible
+    skipped_sanity    = 0   # prédiction trop loin de la ligne (modèle déréglé)
+
+    for i in range(MIN_TRAIN, len(df)):
+        actual = float(df.iloc[i][target_col])
+
+        # FILTRE DNP: réel == 0 = joueur n'a pas joué
+        if actual == 0:
+            skipped_dnp += 1
+            continue
+
+        # FILTRE MIN < 20 min
+        if 'MIN' in df.columns and float(df.iloc[i].get('MIN', 30)) < 20:
+            skipped_dnp += 1
+            continue
+
+        df_train = df.iloc[:i]
+        X_train  = df_train[feat_cols].fillna(0)
+        y_train  = df_train[target_col]
+
+        if len(X_train) < 10:
+            continue
+
+        line = _simulate_line(df_train[target_col].values)
+        if line is None or line <= 0:
+            continue
+
         try:
-            line_value = collector.get_line_value_score(player, stat_type, line)
+            model = xgb.XGBRegressor(
+                max_depth=3, learning_rate=0.05, n_estimators=60,
+                subsample=0.75, colsample_bytree=0.75,
+                reg_alpha=0.1, reg_lambda=1.0,
+                min_child_weight=3, random_state=42, verbosity=0
+            )
+            model.fit(X_train, y_train)
         except Exception:
-            pass
+            continue
 
-    line_analysis = analyze_betting_line(prediction, ci, line)
-    line_analysis['line_value_score'] = round(line_value, 2)
+        y_pred_train = model.predict(X_train)
+        train_r2     = float(r2_score(y_train, y_pred_train))
+        train_rmse   = float(np.sqrt(mse_fn(y_train, y_pred_train)))
 
-    df       = collector.get_complete_player_data(player)
-    stat_col = {'points': 'PTS', 'assists': 'AST', 'rebounds': 'REB', '3pt': 'FG3M'}[stat_type]
-    excluded = int(df['games_excluded_count'].iloc[0]) if 'games_excluded_count' in df.columns else 0
+        X_pred     = df.iloc[i:i+1][feat_cols].fillna(X_train.mean())
+        prediction = float(model.predict(X_pred)[0])
+        prediction = max(prediction, 0)  # jamais négatif
+        all_errors.append(abs(actual - prediction))
 
-    season_stats = {
-        'games_played':    len(df),
-        'games_excluded':  excluded,
-        'weighted_avg':    round(float(df[stat_col].mean()),       1),
-        'std_dev':         round(float(df[stat_col].std()),        1),
-        'last_5_avg':      round(float(df[stat_col].head(5).mean()), 1),
-        'last_10_avg':     round(float(df[stat_col].head(10).mean()), 1),
-        'min':             int(df[stat_col].min()),
-        'max':             int(df[stat_col].max())
-    }
+        # FILTRE RMSE/ligne > 40%
+        if line > 0 and (train_rmse / line) > MAX_RMSE_RATIO:
+            skipped_rmse += 1
+            continue
 
-    key = f"{player}_{stat_type}"
-    if key in model_manager.models:
-        ms      = model_manager.models[key].training_stats
-        r2      = ms.get('test_metrics', {}).get('r2',   0.5)
-        rmse    = ms.get('test_metrics', {}).get('rmse', 5.0)
-        overfit = ms.get('overfit_gap', 0.0)
-    else:
-        r2, rmse, overfit = 0.5, 5.0, 0.0
+        # FILTRE line_value
+        lv = _line_value(df_train[target_col].values, line)
+        if lv < LINE_VALUE_MIN:
+            skipped_lv += 1
+            continue
+
+        # SANITY CHECK: prédiction trop loin de la ligne = modèle déréglé
+        pred_ratio = prediction / line if line > 0 else 1.0
+        if pred_ratio < PRED_LINE_RATIO_MIN or pred_ratio > PRED_LINE_RATIO_MAX:
+            skipped_sanity += 1
+            continue
+
+        # Calcul edge
+        std = max(train_rmse, 2.0)
+        z   = (line - prediction) / std
+        op  = (1 - scipy_stats.norm.cdf(z)) * 100
+        up  = 100 - op
+
+        if op > VIG_BREAK_EVEN:
+            edge, rec, won = op - VIG_BREAK_EVEN, 'OVER',  actual > line
+        elif up > VIG_BREAK_EVEN:
+            edge, rec, won = up - VIG_BREAK_EVEN, 'UNDER', actual < line
+        else:
+            edge, rec, won = 0, 'SKIP', False
+
+        if rec == 'SKIP' or edge < min_edge or train_r2 < 0.05:
+            continue
+
+        profit = stake * (100 / abs(ODDS)) if won else -stake
+        bets.append({
+            'date':           str(df.iloc[i]['GAME_DATE'])[:10],
+            'actual':         round(actual,     1),
+            'prediction':     round(prediction, 1),
+            'line':           round(line,       1),
+            'edge':           round(edge,       1),
+            'line_value':     round(lv,         2),
+            'rmse_ratio':     round(train_rmse / line, 2),
+            'recommendation': rec,
+            'won':            bool(won),
+            'profit':         round(profit, 2)
+        })
+
+    if not bets:
+        return {
+            'status':              'NO_BETS',
+            'message':             f'0 pari qualifié. Skippés: {skipped_dnp} DNP, {skipped_rmse} RMSE, {skipped_lv} line_value, {skipped_sanity} sanity.',
+            'total_predictions':   len(all_errors),
+            'skipped_dnp':         skipped_dnp,
+            'skipped_rmse':        skipped_rmse,
+            'skipped_line_value':  skipped_lv,
+            'skipped_sanity':      skipped_sanity,
+            'avg_error':           round(float(np.mean(all_errors)), 2) if all_errors else 0
+        }
+
+    total_bets   = len(bets)
+    wins         = sum(1 for b in bets if b['won'])
+    win_rate     = round(wins / total_bets * 100, 1)
+    total_profit = sum(b['profit'] for b in bets)
+    verdict      = _verdict(total_bets, win_rate)
 
     return {
-        'status': 'SUCCESS', 'player': player, 'opponent': opponent,
-        'is_home': is_home, 'stat_type': stat_type,
-        'prediction': prediction, 'confidence_interval': ci,
-        'line_analysis': line_analysis, 'season_stats': season_stats,
-        'regression_stats': {
-            'r_squared':   round(r2,      3),
-            'rmse':        round(rmse,    2),
-            'overfit_gap': round(overfit, 3),
-            'model_type':  'XGBoost'
-        },
-        'data_source': 'NBA API + XGBoost v3'
+        'status':             'SUCCESS',
+        'player':             player_name,
+        'stat_type':          stat_type,
+        'season':             season,
+        'total_bets':         total_bets,
+        'wins':               wins,
+        'losses':             total_bets - wins,
+        'win_rate':           win_rate,
+        'total_profit':       round(total_profit, 2),
+        'roi':                round(total_profit / (total_bets * stake) * 100, 2),
+        'avg_error':          round(float(np.mean(all_errors)), 2) if all_errors else 0,
+        'avg_edge':           round(float(np.mean([b['edge'] for b in bets])), 1),
+        'avg_line_value':     round(float(np.mean([b['line_value'] for b in bets])), 2),
+        'break_even':         round(VIG_BREAK_EVEN, 1),
+        'skipped_dnp':        skipped_dnp,
+        'skipped_rmse':       skipped_rmse,
+        'skipped_line_value': skipped_lv,
+        'skipped_sanity':     skipped_sanity,
+        **verdict,
+        'bets': bets[-20:]
     }
 
 
-# ------------------------------------------------------------------
-# DAILY OPPORTUNITIES
-# ------------------------------------------------------------------
+def register_backtest_routes(app, collector):
 
-@app.route('/api/daily-opportunities-points',   methods=['GET'])
-def daily_opportunities_points():
-    return scan_by_type('points',   25)
+    @app.route('/api/backtest', methods=['POST'])
+    def run_backtest():
+        if collector is None:
+            return jsonify({'status': 'ERROR', 'message': 'XGBoost non disponible'}), 503
 
-@app.route('/api/daily-opportunities-assists',  methods=['GET'])
-def daily_opportunities_assists():
-    return scan_by_type('assists',  25)
+        data      = request.get_json() or {}
+        player    = data.get('player',    'LeBron James')
+        stat_type = data.get('stat_type', 'points')
+        season    = data.get('season',    '2023-24')
+        min_edge  = float(data.get('min_edge', 5.0))
+        stake     = float(data.get('stake',    50.0))
 
-@app.route('/api/daily-opportunities-rebounds', methods=['GET'])
-def daily_opportunities_rebounds():
-    return scan_by_type('rebounds', 25)
+        print(f"\nBACKTEST v3: {player} | {stat_type} | {season} | edge>={min_edge}%")
+        try:
+            result = _run_walkforward(player, stat_type, season, min_edge, stake, collector)
+            return jsonify(result)
+        except Exception as e:
+            import traceback; traceback.print_exc()
+            return jsonify({'status': 'ERROR', 'message': str(e)}), 500
 
-@app.route('/api/daily-opportunities-3pt',      methods=['GET'])
-def daily_opportunities_3pt():
-    return scan_by_type('3pt',      25)
-
-
-def scan_by_type(stat_type, limit=25):
-    min_edge       = request.args.get('min_edge',       5.0,  type=float)
-    min_r2         = request.args.get('min_r2',         0.40, type=float)
-    min_line_value = request.args.get('min_line_value', 0.5,  type=float)
-
-    if not ODDS_API_AVAILABLE or not XGBOOST_AVAILABLE:
-        return jsonify({'status': 'ERROR', 'message': 'Service unavailable'}), 503
-
-    try:
-        props = [p for p in odds_client.get_player_props(days=1) if p.get('stat_type') == stat_type]
-        if not props:
-            return jsonify({
-                'status': 'SUCCESS', 'stat_type': stat_type,
-                'total_available': 0, 'total_analyzed': 0, 'opportunities_found': 0,
-                'scan_time': datetime.now().isoformat(), 'opportunities': []
-            })
-
-        random.shuffle(props)
-        opportunities  = []
-        analyzed_count = 0
-
-        for prop in props[:limit]:
-            player   = prop.get('player', 'Unknown')
-            line     = prop.get('line', 0)
-            opponent = prop.get('away_team', 'Unknown')
-            is_home  = bool(prop.get('home_team'))
-            try:
-                result = analyze_with_xgboost(player, opponent, is_home, stat_type, line)
-                analyzed_count += 1
-                if result.get('status') != 'SUCCESS':
-                    continue
-                r2         = result['regression_stats']['r_squared']
-                overfit    = result['regression_stats']['overfit_gap']
-                rmse       = result['regression_stats']['rmse']
-                edge       = result['line_analysis']['edge']
-                rec        = result['line_analysis']['recommendation']
-                lv         = abs(result['line_analysis'].get('line_value_score', 0))
-                rmse_ratio = (rmse / line) if line and line > 0 else 1.0
-
-                # Filtre RMSE/ligne > 40%: modele trop imprécis pour ce joueur/ligne
-                if rec == 'SKIP' or edge < min_edge or r2 < min_r2 or overfit > 0.35 or lv < min_line_value or rmse_ratio > 0.40:
-                    continue
-
-                result['regression_stats']['rmse_ratio'] = round(rmse_ratio, 2)
-                result['game_info']      = {'date': prop.get('date',''), 'home_team': prop.get('home_team',''), 'away_team': prop.get('away_team','')}
-                result['bookmaker_info'] = {'bookmaker': prop.get('bookmaker','Unknown'), 'line': line, 'over_odds': prop.get('over_odds',-110), 'under_odds': prop.get('under_odds',-110)}
-                opportunities.append(result)
-            except Exception as e:
-                print(f"ERROR {player}: {e}")
-
-        opportunities.sort(key=lambda x: (abs(x['line_analysis'].get('line_value_score',0)), x['regression_stats']['r_squared']), reverse=True)
-
-        return jsonify({
-            'status': 'SUCCESS', 'stat_type': stat_type,
-            'total_available': len(props), 'total_analyzed': analyzed_count,
-            'opportunities_found': len(opportunities),
-            'scan_time': datetime.now().isoformat(),
-            'filters': {'min_edge': min_edge, 'min_r2': min_r2, 'min_line_value': min_line_value},
-            'opportunities': opportunities
-        })
-    except Exception as e:
-        import traceback; traceback.print_exc()
-        return jsonify({'status': 'ERROR', 'message': str(e)}), 500
-
-
-# ------------------------------------------------------------------
-# PLAYER HISTORY
-# ------------------------------------------------------------------
-
-@app.route('/api/player-history/<player_name>', methods=['GET'])
-def get_player_history(player_name):
-    if not XGBOOST_AVAILABLE:
-        return jsonify({'status': 'ERROR', 'message': 'Not available'}), 503
-    try:
-        df = collector.get_complete_player_data(player_name)
-        if df is None or len(df) == 0:
-            return jsonify({'status': 'ERROR', 'message': f'No data for {player_name}'}), 404
-
-        df      = df.sort_values('GAME_DATE', ascending=False)
-        games   = []
-        excluded = int(df['games_excluded_count'].iloc[0]) if 'games_excluded_count' in df.columns else 0
-
-        for _, row in df.head(10).iterrows():
-            games.append({
-                'date':           str(row['GAME_DATE'])[:10],
-                'opponent':       row['MATCHUP'].split()[-1],
-                'is_home':        'vs' in row['MATCHUP'],
-                'points':         int(row['PTS']),
-                'assists':        int(row['AST']),
-                'rebounds':       int(row['REB']),
-                'three_pointers': int(row.get('FG3M', 0)),
-                'minutes':        int(row['MIN']),
-                'result':         'W' if row.get('WL','') == 'W' else 'L'
-            })
-
-        wl = df.head(5)['WL'].value_counts().to_dict() if 'WL' in df.columns else {}
-        return jsonify({
-            'status': 'SUCCESS', 'player': player_name, 'games': games,
-            'games_excluded': excluded,
-            'stats': {
-                'games_played': len(df), 'avg_points': round(float(df['PTS'].mean()),1),
-                'avg_assists':  round(float(df['AST'].mean()),1),
-                'avg_rebounds': round(float(df['REB'].mean()),1),
-                'avg_minutes':  round(float(df['MIN'].mean()),1),
-                'last_5_pts':   round(float(df['PTS'].head(5).mean()),1)
-            },
-            'trends': {
-                'points_trend': round(float(df['PTS'].head(5).mean() - df['PTS'].iloc[5:10].mean()), 1) if len(df) >= 10 else 0,
-                'form':        f"{wl.get('W',0)}W-{wl.get('L',0)}L",
-                'minutes_avg': round(float(df['MIN'].head(5).mean()), 1)
-            }
-        })
-    except Exception as e:
-        import traceback; traceback.print_exc()
-        return jsonify({'status': 'ERROR', 'message': str(e)}), 500
-
-
-# ------------------------------------------------------------------
-# HEALTH + USAGE
-# ------------------------------------------------------------------
-
-@app.route('/api/health', methods=['GET'])
-def health_check():
-    return jsonify({
-        'status': 'OK', 'version': 'v3-split',
-        'xgboost_enabled': XGBOOST_AVAILABLE,
-        'odds_api_enabled': ODDS_API_AVAILABLE,
-        'outlier_filter': True,
-        'backtest_enabled': True,
-        'timestamp': datetime.now().isoformat()
-    })
-
-@app.route('/api/odds/usage', methods=['GET'])
-def get_odds_usage():
-    if ODDS_API_AVAILABLE and odds_client:
-        return jsonify(odds_client.get_usage_stats())
-    return jsonify({'error': 'Odds API not available'}), 503
-
-
-# ------------------------------------------------------------------
-# MAIN
-# ------------------------------------------------------------------
-
-# Enregistrement du backtest au niveau module (requis pour gunicorn/Render)
-try:
-    from nba_analyzer_backtest import register_backtest_routes
-    register_backtest_routes(app, collector)
-except Exception as _e:
-    print(f"Backtest module non charge: {_e}")
-
-if __name__ == '__main__':
-
-    port  = int(os.environ.get('PORT', 5000))
-    debug = os.environ.get('DEBUG', 'False').lower() == 'true'
-    print("\n" + "="*55)
-    print("NBA ANALYZER v3 — SPLIT VERSION")
-    print(f"XGBoost:  {'OK' if XGBOOST_AVAILABLE else 'NON DISPO'}")
-    print(f"Odds API: {'OK' if ODDS_API_AVAILABLE else 'NON DISPO'}")
-    print(f"Outlier filter: ACTIF (< 20 min + winsorisation 2.5σ)")
-    print(f"Line value filter: ACTIF (min=0.5)")
-    print(f"Backtest: nba_analyzer_backtest.py")
-    print(f"Port: {port}")
-    print("="*55 + "\n")
-    app.run(host='0.0.0.0', port=port, debug=debug)
+    print("   /api/backtest registered (v3 — DNP filter, sanity check, CI>=0)")
