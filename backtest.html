@@ -323,7 +323,29 @@ async function launchBacktest() {
     });
     const data = await res.json();
     document.getElementById('loading').style.display = 'none';
-    (data.status === 'ERROR' || data.status === 'NO_BETS') ? showError(data.message) : showResults(data);
+    if (data.status === 'ERROR' || data.status === 'NO_BETS') {
+      showError(data.message);
+    } else {
+      // Sauvegarde automatique dans le cache backend
+      if (data.total_bets >= 10) {
+        fetch(`${BACKEND}/api/backtest-cache`, {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            player:       data.player,
+            stat_type:    data.stat_type,
+            season:       data.season,
+            win_rate:     data.win_rate,
+            total_bets:   data.total_bets,
+            roi:          data.roi,
+            verdict:      data.verdict,
+            verdict_color: data.verdict_color,
+            avg_error:    data.avg_error
+          })
+        }).catch(() => {});  // silencieux si ça échoue
+      }
+      showResults(data);
+    }
   } catch (err) {
     document.getElementById('loading').style.display = 'none';
     showError('Impossible de contacter le serveur. Vérifie ta connexion.');
