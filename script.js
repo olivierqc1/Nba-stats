@@ -1,277 +1,196 @@
-const API_URL = 'https://nba-stats-xcyv.onrender.com';
+// ============================================================
+// NBA Analyzer — script.js
+// Badge cache backtest intégré sur chaque carte joueur
+// ============================================================
 
+const BACKEND = 'https://nba-stats-xcyv.onrender.com';
+
+// Cache backtest chargé au démarrage
+let backtestCache = {};
+
+// Charge le cache dès que la page s'ouvre
+async function loadBacktestCache() {
+  try {
+    const res  = await fetch(`${BACKEND}/api/backtest-cache`);
+    backtestCache = await res.json();
+    console.log(`Cache backtest: ${Object.keys(backtestCache).length} joueurs`);
+  } catch (e) {
+    console.warn('Cache backtest non disponible');
+  }
+}
+loadBacktestCache();
+
+// ── Badge fiabilité ──────────────────────────────────────────
+function getBadgeHtml(playerName, statType) {
+  const key  = playerName.toLowerCase().replace(/ /g, '_');
+  const data = backtestCache[key]?.[statType];
+  if (!data || data.total_bets < 10) {
+    return `<span class="bt-badge bt-grey" title="Pas encore validé — Lance le backtest">⬜ Non testé</span>`;
+  }
+  const wr = data.win_rate;
+  if (wr >= 60) return `<span class="bt-badge bt-green" title="${data.total_bets} paris · ${data.season}">🟢 ${wr}% (${data.total_bets} paris)</span>`;
+  if (wr >= 55) return `<span class="bt-badge bt-yellow" title="${data.total_bets} paris · ${data.season}">🟡 ${wr}% (${data.total_bets} paris)</span>`;
+  return `<span class="bt-badge bt-red" title="${data.total_bets} paris · ${data.season}">🔴 ${wr}% (${data.total_bets} paris)</span>`;
+}
+
+// ── CSS badges (injecté une seule fois) ─────────────────────
+(function injectBadgeStyles() {
+  const s = document.createElement('style');
+  s.textContent = `
+    .bt-badge { display:inline-block; padding:4px 12px; border-radius:20px;
+      font-size:0.78em; font-weight:700; margin-left:8px; vertical-align:middle; cursor:default; }
+    .bt-green  { background:#d1fae5; color:#065f46; }
+    .bt-yellow { background:#fef3c7; color:#92400e; }
+    .bt-red    { background:#fee2e2; color:#991b1b; }
+    .bt-grey   { background:#f3f4f6; color:#6b7280; }
+  `;
+  document.head.appendChild(s);
+})();
+
+// ── Scan ────────────────────────────────────────────────────
 async function scanOpportunities(statType) {
-    const minEdge = document.getElementById('minEdge').value;
-    const minR2 = parseFloat(document.getElementById('minR2').value);
+  const minR2   = parseFloat(document.getElementById('minR2').value);
+  const minEdge = parseFloat(document.getElementById('minEdge').value);
 
-    document.querySelectorAll('.btn-scan').forEach(btn => btn.disabled = true);
+  document.querySelectorAll('.btn-scan').forEach(b => b.disabled = true);
+  document.getElementById('loadingDiv').classList.remove('hidden');
+  document.getElementById('resultsDiv').classList.add('hidden');
+  document.getElementById('errorDiv').classList.add('hidden');
+  document.getElementById('statsBar').classList.add('hidden');
 
-    document.getElementById('loadingDiv').classList.remove('hidden');
-    document.getElementById('statsBar').classList.add('hidden');
-    document.getElementById('resultsDiv').classList.add('hidden');
-    document.getElementById('errorDiv').classList.add('hidden');
+  try {
+    const url = `${BACKEND}/api/daily-opportunities-${statType}?min_r2=${minR2}&min_edge=${minEdge}`;
+    const res  = await fetch(url);
+    const data = await res.json();
 
-    const endpoints = {
-        'points': 'daily-opportunities-points',
-        'assists': 'daily-opportunities-assists',
-        'rebounds': 'daily-opportunities-rebounds',
-        '3pt': 'daily-opportunities-3pt'
-    };
+    document.getElementById('loadingDiv').classList.add('hidden');
+    document.querySelectorAll('.btn-scan').forEach(b => b.disabled = false);
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 300000);
-
-    try {
-        const response = await fetch(
-            `${API_URL}/api/${endpoints[statType]}?min_edge=${minEdge}&min_r2=${minR2}`,
-            { signal: controller.signal }
-        );
-
-        clearTimeout(timeoutId);
-
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
-
-        const data = await response.json();
-
-        if (data.status === 'SUCCESS') {
-            displayResults(data, statType);
-        } else {
-            displayError(data.message || 'Erreur inconnue');
-        }
-    } catch (error) {
-        clearTimeout(timeoutId);
-        
-        if (error.name === 'AbortError') {
-            displayError('⏱️ Timeout après 5 min');
-        } else {
-            displayError(`❌ Erreur: ${error.message}`);
-        }
-    } finally {
-        document.getElementById('loadingDiv').classList.add('hidden');
-        document.querySelectorAll('.btn-scan').forEach(btn => btn.disabled = false);
+    if (data.opportunities && data.opportunities.length > 0) {
+      displayOpportunities(data.opportunities, statType);
+      document.getElementById('statsBar').classList.remove('hidden');
+      document.getElementById('statType').textContent   = statType.toUpperCase();
+      document.getElementById('analyzedProps').textContent = data.total_analyzed || '?';
+      document.getElementById('foundOpps').textContent  = data.opportunities.length;
+      const avgR2 = data.opportunities.reduce((s, o) => s + o.regression_stats.r_squared, 0) / data.opportunities.length;
+      document.getElementById('avgR2').textContent = (avgR2 * 100).toFixed(1) + '%';
+    } else {
+      document.getElementById('errorDiv').classList.remove('hidden');
+      document.getElementById('errorDiv').textContent = '❌ Aucune opportunité trouvée. Essaie de baisser les filtres.';
     }
+  } catch (err) {
+    document.getElementById('loadingDiv').classList.add('hidden');
+    document.querySelectorAll('.btn-scan').forEach(b => b.disabled = false);
+    document.getElementById('errorDiv').classList.remove('hidden');
+    document.getElementById('errorDiv').textContent = `❌ Erreur: ${err.message}`;
+  }
 }
 
-function displayResults(data, statType) {
-    const opportunities = data.opportunities || [];
-    
-    document.getElementById('statsBar').classList.remove('hidden');
-    
-    const statLabels = {
-        'points': 'POINTS',
-        'assists': 'ASSISTS',
-        'rebounds': 'REBOUNDS',
-        '3pt': '3-POINTS'
-    };
-    
-    document.getElementById('statType').textContent = statLabels[statType];
-    document.getElementById('analyzedProps').textContent = data.total_analyzed;
-    document.getElementById('foundOpps').textContent = opportunities.length;
-    
-    if (opportunities.length > 0) {
-        const avgR2 = opportunities.reduce((sum, o) => 
-            sum + (o.regression_stats?.r_squared || 0), 0) / opportunities.length;
-        document.getElementById('avgR2').textContent = avgR2.toFixed(3);
-    }
-
-    if (opportunities.length === 0) {
-        displayError(`Aucun pari trouvé avec R² ≥ ${document.getElementById('minR2').value} et Edge ≥ ${document.getElementById('minEdge').value}%. Baisse R² à 0.10 et Edge à 0% pour tester.`);
-        return;
-    }
-    
-    const resultsDiv = document.getElementById('resultsDiv');
-    resultsDiv.innerHTML = opportunities.map((opp, index) => 
-        createOpportunityCard(opp, index + 1)
-    ).join('');
-    resultsDiv.classList.remove('hidden');
-    
-    document.querySelectorAll('.technical-header').forEach(header => {
-        header.addEventListener('click', function() {
-            const content = this.nextElementSibling;
-            const icon = this.querySelector('.toggle-icon');
-            content.classList.toggle('open');
-            icon.classList.toggle('open');
-        });
-    });
+// ── Rendu des cartes ────────────────────────────────────────
+function displayOpportunities(opportunities, statType) {
+  const container = document.getElementById('resultsDiv');
+  container.classList.remove('hidden');
+  container.innerHTML = opportunities.map((opp, i) => buildCard(opp, i + 1, statType)).join('');
 }
 
-function displayError(message) {
-    const errorDiv = document.getElementById('errorDiv');
-    errorDiv.textContent = message;
-    errorDiv.classList.remove('hidden');
+function buildCard(opp, rank, statType) {
+  const rec    = opp.line_analysis.recommendation;
+  const isOver = rec === 'OVER';
+  const line   = opp.line_analysis.bookmaker_line;
+  const pred   = opp.prediction;
+  const ci     = opp.confidence_interval;
+  const stats  = opp.regression_stats;
+  const lv     = opp.line_analysis.line_value_score || 0;
+  const edge   = opp.line_analysis.edge;
+  const player = opp.player;
+
+  const badge = getBadgeHtml(player, statType);
+
+  const kelly = opp.line_analysis.kelly_fraction
+    ? `<div class="metric"><div class="metric-label">📈 Kelly</div><div class="metric-value">${(opp.line_analysis.kelly_fraction * 100).toFixed(1)}%</div></div>`
+    : '';
+
+  return `
+    <div class="opp-card ${isOver ? '' : 'under'}" data-rank="${rank}">
+      <div class="opp-header">
+        <div class="opp-player" onclick="openPlayerModal('${player.replace(/'/g, "\\'")}')">
+          ${player}${badge}
+        </div>
+        <div class="opp-matchup">
+          ${opp.is_home ? '🏠' : '✈️'} vs ${opp.opponent} • ${statType.charAt(0).toUpperCase() + statType.slice(1)}
+        </div>
+        <span class="opp-badge ${isOver ? 'over' : 'under'}">${rec} ${line}</span>
+      </div>
+
+      <div class="prediction-box">
+        <div class="pred-row">
+          <div><div class="pred-label">Prédiction modèle</div><div class="pred-value">${pred}</div></div>
+          <div><div class="pred-label">vs Ligne</div><div class="pred-value">${line}</div></div>
+        </div>
+        <div class="confidence-interval">
+          <div class="confidence-interval-label">Intervalle de confiance 95%</div>
+          <div class="confidence-interval-range">${ci.lower} - ${ci.upper}</div>
+        </div>
+        <div class="metrics-grid" style="margin-top:15px;">
+          <div class="metric"><div class="metric-label">🎯 R² TEST</div><div class="metric-value">${(stats.r_squared * 100).toFixed(1)}%</div></div>
+          <div class="metric"><div class="metric-label">📊 RMSE</div><div class="metric-value">${stats.rmse}</div></div>
+          <div class="metric"><div class="metric-label">💰 Edge</div><div class="metric-value">+${edge.toFixed(1)}%</div></div>
+          ${kelly}
+          <div class="metric"><div class="metric-label">📉 Line Value</div><div class="metric-value">${lv > 0 ? '+' : ''}${lv.toFixed(2)}</div></div>
+        </div>
+      </div>
+
+      <div class="action-box ${isOver ? '' : 'under'}">
+        <div class="action-title">${isOver ? '✅ PARIE OVER' : '✅ PARIE UNDER'} ${line}</div>
+        <div class="action-detail">Prédiction: <strong>${pred}</strong> pts | Edge: <strong>+${edge.toFixed(1)}%</strong></div>
+      </div>
+    </div>`;
 }
 
-function getTeamName(abbr) {
-    const teams = {
-        'ATL': 'Atlanta Hawks', 'BOS': 'Boston Celtics', 'BKN': 'Brooklyn Nets',
-        'CHA': 'Charlotte Hornets', 'CHI': 'Chicago Bulls', 'CLE': 'Cleveland Cavaliers',
-        'DAL': 'Dallas Mavericks', 'DEN': 'Denver Nuggets', 'DET': 'Detroit Pistons',
-        'GSW': 'Golden State Warriors', 'HOU': 'Houston Rockets', 'IND': 'Indiana Pacers',
-        'LAC': 'LA Clippers', 'LAL': 'LA Lakers', 'MEM': 'Memphis Grizzlies',
-        'MIA': 'Miami Heat', 'MIL': 'Milwaukee Bucks', 'MIN': 'Minnesota Timberwolves',
-        'NOP': 'New Orleans Pelicans', 'NYK': 'New York Knicks', 'OKC': 'Oklahoma City Thunder',
-        'ORL': 'Orlando Magic', 'PHI': 'Philadelphia 76ers', 'PHX': 'Phoenix Suns',
-        'POR': 'Portland Trail Blazers', 'SAC': 'Sacramento Kings', 'SAS': 'San Antonio Spurs',
-        'TOR': 'Toronto Raptors', 'UTA': 'Utah Jazz', 'WAS': 'Washington Wizards'
-    };
-    return teams[abbr] || abbr;
+// ── Modal joueur ─────────────────────────────────────────────
+async function openPlayerModal(playerName) {
+  document.getElementById('modalPlayerName').textContent = playerName;
+  document.getElementById('playerModal').classList.add('open');
+  document.getElementById('modalContent').innerHTML = '<div class="spinner" style="margin:40px auto;width:50px;height:50px;border:5px solid #f3f3f3;border-top:5px solid #667eea;border-radius:50%;animation:spin 1s linear infinite;"></div>';
+
+  try {
+    const res  = await fetch(`${BACKEND}/api/player-history/${encodeURIComponent(playerName)}`);
+    const data = await res.json();
+    renderPlayerModal(data, playerName);
+  } catch (e) {
+    document.getElementById('modalContent').innerHTML = '<p style="color:#ef4444;text-align:center;">Erreur de chargement</p>';
+  }
 }
 
-function calculateProbabilities(prediction, ci, line) {
-    const std = (ci.upper - ci.lower) / 3.92;
-    const results = [];
-    
-    for (let offset = -2; offset <= 2; offset += 0.5) {
-        const testLine = line + offset;
-        const z = (testLine - prediction) / std;
-        const overProb = (1 - normalCDF(z)) * 100;
-        const underProb = 100 - overProb;
-        
-        results.push({
-            line: testLine,
-            overProb: overProb.toFixed(1),
-            underProb: underProb.toFixed(1)
-        });
-    }
-    
-    return results;
-}
+function renderPlayerModal(data, playerName) {
+  if (!data.games || data.games.length === 0) {
+    document.getElementById('modalContent').innerHTML = '<p style="text-align:center;">Aucun match trouvé</p>';
+    return;
+  }
 
-function normalCDF(z) {
-    const t = 1 / (1 + 0.2316419 * Math.abs(z));
-    const d = 0.3989423 * Math.exp(-z * z / 2);
-    const prob = d * t * (0.3193815 + t * (-0.3565638 + t * (1.781478 + t * (-1.821256 + t * 1.330274))));
-    return z > 0 ? 1 - prob : prob;
+  const rows = data.games.slice(0, 10).map(g => `
+    <tr>
+      <td>${g.date || ''}</td>
+      <td>${g.opponent || ''}</td>
+      <td>${g.home ? '🏠' : '✈️'}</td>
+      <td><strong>${g.pts ?? '-'}</strong></td>
+      <td>${g.ast ?? '-'}</td>
+      <td>${g.reb ?? '-'}</td>
+      <td>${g.min ?? '-'}</td>
+    </tr>`).join('');
+
+  document.getElementById('modalContent').innerHTML = `
+    <table class="prob-table">
+      <thead><tr><th>Date</th><th>Adversaire</th><th>Lieu</th><th>PTS</th><th>AST</th><th>REB</th><th>MIN</th></tr></thead>
+      <tbody>${rows}</tbody>
+    </table>`;
 }
 
 function closePlayerModal() {
-    document.getElementById('playerModal').classList.remove('open');
+  document.getElementById('playerModal').classList.remove('open');
 }
 
-window.onclick = function(event) {
-    const modal = document.getElementById('playerModal');
-    if (event.target === modal) {
-        closePlayerModal();
-    }
-}
-function createOpportunityCard(opp, rank) {
-    const rec = opp.line_analysis.recommendation;
-    const recClass = rec.toLowerCase();
-    const edge = opp.line_analysis.edge;
-    const kelly = opp.line_analysis.kelly_criterion;
-    const r2 = opp.regression_stats?.r_squared || 0;
-    const rmse = opp.regression_stats?.rmse || 0;
-    const ci = opp.confidence_interval;
-    const line = opp.line_analysis.bookmaker_line;
-
-    const statLabel = {
-        'points': 'Points',
-        'assists': 'Assists',
-        'rebounds': 'Rebounds',
-        '3pt': '3-Points'
-    }[opp.stat_type];
-
-    const teamName = getTeamName(opp.opponent);
-    const probabilities = calculateProbabilities(opp.prediction, ci, line);
-    const betRangeLower = rec === 'OVER' ? line : ci.lower;
-    const betRangeUpper = rec === 'OVER' ? ci.upper : line;
-
-    return `
-        <div class="opp-card ${recClass}" data-rank="${rank}">
-            <div class="opp-header">
-                <div class="opp-player">${opp.player}</div>
-                <div class="opp-matchup">
-                    ${opp.is_home ? '🏠 vs' : '✈️ @'} ${teamName} • ${statLabel}
-                </div>
-                <div class="opp-badge ${recClass}">
-                    ${rec} ${line}
-                </div>
-            </div>
-
-            <div class="prediction-box">
-                <div class="pred-row">
-                    <div>
-                        <div class="pred-label">Prédiction modèle</div>
-                        <div class="pred-value">${opp.prediction.toFixed(1)}</div>
-                    </div>
-                    <div style="text-align: right;">
-                        <div class="pred-label">vs Ligne</div>
-                        <div class="pred-value">${line}</div>
-                    </div>
-                </div>
-                
-                <div class="confidence-interval">
-                    <div class="confidence-interval-label">Intervalle de confiance 95%</div>
-                    <div class="confidence-interval-range">${ci.lower.toFixed(1)} - ${ci.upper.toFixed(1)}</div>
-                </div>
-                
-                <div class="metrics-grid">
-                    <div class="metric">
-                        <div class="metric-label">🎯 R² TEST</div>
-                        <div class="metric-value">${(r2 * 100).toFixed(1)}%</div>
-                    </div>
-                    <div class="metric">
-                        <div class="metric-label">📊 RMSE</div>
-                        <div class="metric-value">${rmse.toFixed(1)}</div>
-                    </div>
-                    <div class="metric">
-                        <div class="metric-label">💰 Edge</div>
-                        <div class="metric-value">+${edge.toFixed(1)}%</div>
-                    </div>
-                    <div class="metric">
-                        <div class="metric-label">📈 Kelly</div>
-                        <div class="metric-value">${kelly.toFixed(1)}%</div>
-                    </div>
-                </div>
-            </div>
-
-            <div class="action-box ${recClass}">
-                <div class="action-title">🎯 ACTION À PRENDRE</div>
-                <div class="action-detail">
-                    ➤ Parier <strong>${rec} ${line}</strong><br>
-                    ➤ Mise: <strong>${kelly.toFixed(1)}%</strong> de ta bankroll<br>
-                    ➤ R² TEST: <strong>${(r2 * 100).toFixed(0)}%</strong> (performance réelle!)
-                </div>
-            </div>
-            
-            <div class="technical-details">
-                <div class="technical-header">
-                    <div class="technical-title">📊 Détails techniques</div>
-                    <div class="toggle-icon">▼</div>
-                </div>
-                <div class="technical-content">
-                    <div class="bet-range" style="margin-top: 15px;">
-                        <div class="bet-range-title">💡 Range de pari recommandé</div>
-                        <div class="bet-range-value">
-                            ${rec} entre ${betRangeLower.toFixed(1)} et ${betRangeUpper.toFixed(1)}
-                        </div>
-                        <div style="margin-top: 10px; font-size: 0.9em; color: #374151;">
-                            Si la ligne sur ton bookmaker est dans cet intervalle, le pari reste +EV.
-                        </div>
-                    </div>
-                    
-                    <table class="prob-table" style="margin-top: 15px;">
-                        <thead>
-                            <tr>
-                                <th>Ligne</th>
-                                <th>Prob OVER</th>
-                                <th>Prob UNDER</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            ${probabilities.map(p => `
-                                <tr ${p.line === line ? 'style="background: #fef3c7; font-weight: bold;"' : ''}>
-                                    <td>${p.line.toFixed(1)}</td>
-                                    <td>${p.overProb}%</td>
-                                    <td>${p.underProb}%</td>
-                                </tr>
-                            `).join('')}
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
-    `;
-}
+// Ferme modal en cliquant hors
+window.addEventListener('click', e => {
+  if (e.target === document.getElementById('playerModal')) closePlayerModal();
+});
