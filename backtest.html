@@ -1,514 +1,553 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>🔬 Backtest — NBA Analyzer</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            min-height: 100vh;
-            padding: 16px;
-        }
-        .container { max-width: 700px; margin: 0 auto; }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🔬 Backtest — NBA Analyzer</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    min-height: 100vh; padding: 20px;
+    color: #1a1a2e;
+  }
+  .container { max-width: 480px; margin: 0 auto; }
 
-        /* Header */
-        .header {
-            background: white;
-            border-radius: 16px;
-            padding: 24px;
-            margin-bottom: 16px;
-            box-shadow: 0 8px 24px rgba(0,0,0,0.15);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-        .header h1 { color: #667eea; font-size: 1.6em; }
-        .btn-back {
-            background: #667eea;
-            color: white;
-            padding: 10px 18px;
-            border-radius: 8px;
-            text-decoration: none;
-            font-weight: 600;
-            font-size: 0.9em;
-        }
+  .header {
+    text-align: center; margin-bottom: 24px;
+  }
+  .header h1 { font-size: 1.8rem; color: white; font-weight: 700; }
+  .header p  { color: rgba(255,255,255,0.8); margin-top: 4px; font-size: 0.9rem; }
+  .back-btn {
+    display: inline-block; margin-bottom: 16px;
+    background: rgba(255,255,255,0.2); color: white;
+    padding: 8px 16px; border-radius: 20px; text-decoration: none;
+    font-size: 0.85rem; backdrop-filter: blur(10px);
+  }
 
-        /* Explication */
-        .explainer {
-            background: #dbeafe;
-            border: 2px solid #3b82f6;
-            border-radius: 12px;
-            padding: 18px;
-            margin-bottom: 16px;
-            color: #1e40af;
-            font-size: 0.95em;
-            line-height: 1.6;
-        }
-        .explainer strong { color: #1e3a8a; }
+  .card {
+    background: white; border-radius: 20px;
+    padding: 24px; margin-bottom: 20px;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.15);
+  }
+  .card h2 { font-size: 1.1rem; font-weight: 700; margin-bottom: 20px; display: flex; align-items: center; gap: 8px; }
 
-        /* Form */
-        .form-card {
-            background: white;
-            border-radius: 16px;
-            padding: 24px;
-            margin-bottom: 16px;
-            box-shadow: 0 8px 24px rgba(0,0,0,0.1);
-        }
-        .form-card h2 { color: #667eea; margin-bottom: 20px; font-size: 1.2em; }
-        .form-group { margin-bottom: 14px; }
-        .form-group label {
-            display: block;
-            font-weight: 600;
-            color: #444;
-            margin-bottom: 6px;
-            font-size: 0.9em;
-        }
-        .form-group input,
-        .form-group select {
-            width: 100%;
-            padding: 12px;
-            border: 2px solid #e0e0e0;
-            border-radius: 8px;
-            font-size: 1em;
-        }
-        .form-group input:focus,
-        .form-group select:focus {
-            outline: none;
-            border-color: #667eea;
-        }
-        .btn-run {
-            width: 100%;
-            padding: 16px;
-            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            color: white;
-            border: none;
-            border-radius: 10px;
-            font-size: 1.1em;
-            font-weight: 700;
-            cursor: pointer;
-            margin-top: 8px;
-            transition: opacity 0.2s;
-        }
-        .btn-run:disabled { opacity: 0.5; cursor: not-allowed; }
+  /* Form */
+  .form-group { margin-bottom: 18px; }
+  label { display: block; font-size: 0.85rem; font-weight: 600; color: #555; margin-bottom: 6px; }
 
-        /* Loading */
-        .loading {
-            background: white;
-            border-radius: 16px;
-            padding: 40px;
-            text-align: center;
-            box-shadow: 0 8px 24px rgba(0,0,0,0.1);
-            margin-bottom: 16px;
-        }
-        .spinner {
-            border: 4px solid #f0f0f0;
-            border-top: 4px solid #667eea;
-            border-radius: 50%;
-            width: 48px;
-            height: 48px;
-            animation: spin 1s linear infinite;
-            margin: 0 auto 16px;
-        }
-        @keyframes spin { to { transform: rotate(360deg); } }
-        .loading p { color: #666; margin-top: 8px; font-size: 0.9em; }
+  /* AUTOCOMPLETE */
+  .autocomplete-wrapper { position: relative; }
+  .autocomplete-wrapper input {
+    width: 100%; padding: 12px 16px;
+    border: 2px solid #e5e7eb; border-radius: 12px;
+    font-size: 1rem; outline: none; transition: border-color 0.2s;
+    background: #f9fafb;
+  }
+  .autocomplete-wrapper input:focus { border-color: #7c3aed; background: white; }
 
-        /* Résultats */
-        .results-card {
-            background: white;
-            border-radius: 16px;
-            padding: 24px;
-            margin-bottom: 16px;
-            box-shadow: 0 8px 24px rgba(0,0,0,0.1);
-        }
+  .suggestions-list {
+    position: absolute; top: calc(100% + 4px); left: 0; right: 0;
+    background: white; border: 2px solid #e5e7eb; border-radius: 12px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.12);
+    z-index: 100; max-height: 240px; overflow-y: auto;
+    display: none;
+  }
+  .suggestions-list.visible { display: block; }
+  .suggestion-item {
+    padding: 12px 16px; cursor: pointer;
+    font-size: 0.95rem; transition: background 0.15s;
+    border-bottom: 1px solid #f3f4f6;
+    display: flex; align-items: center; gap: 10px;
+  }
+  .suggestion-item:last-child { border-bottom: none; }
+  .suggestion-item:hover, .suggestion-item.selected { background: #f3e8ff; color: #7c3aed; }
+  .suggestion-item .icon { font-size: 1.1rem; }
+  .suggestion-item .name { font-weight: 600; }
+  .searching-indicator {
+    padding: 12px 16px; color: #9ca3af;
+    font-size: 0.85rem; font-style: italic;
+  }
+  .no-results {
+    padding: 12px 16px; color: #ef4444;
+    font-size: 0.85rem;
+  }
 
-        /* Verdict */
-        .verdict {
-            padding: 20px;
-            border-radius: 12px;
-            margin-bottom: 20px;
-            text-align: center;
-        }
-        .verdict.positive { background: #d1fae5; border: 2px solid #10b981; }
-        .verdict.marginal { background: #fef3c7; border: 2px solid #f59e0b; }
-        .verdict.negative { background: #fee2e2; border: 2px solid #ef4444; }
-        .verdict-title { font-size: 1.4em; font-weight: 800; margin-bottom: 6px; }
-        .verdict.positive .verdict-title { color: #065f46; }
-        .verdict.marginal .verdict-title { color: #78350f; }
-        .verdict.negative .verdict-title { color: #991b1b; }
-        .verdict-sub { font-size: 0.95em; }
-        .verdict.positive .verdict-sub { color: #047857; }
-        .verdict.marginal .verdict-sub { color: #92400e; }
-        .verdict.negative .verdict-sub { color: #b91c1c; }
+  select, .stake-input {
+    width: 100%; padding: 12px 16px;
+    border: 2px solid #e5e7eb; border-radius: 12px;
+    font-size: 1rem; outline: none; background: #f9fafb;
+    appearance: none; cursor: pointer; transition: border-color 0.2s;
+  }
+  select:focus, .stake-input:focus { border-color: #7c3aed; background: white; }
+  .select-wrapper { position: relative; }
+  .select-wrapper::after {
+    content: '▼'; position: absolute; right: 14px; top: 50%;
+    transform: translateY(-50%); pointer-events: none;
+    color: #9ca3af; font-size: 0.7rem;
+  }
 
-        /* Stats grid */
-        .stats-grid {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 12px;
-            margin-bottom: 20px;
-        }
-        .stat-box {
-            background: #f8f9fa;
-            border-radius: 10px;
-            padding: 16px;
-            text-align: center;
-        }
-        .stat-box .label { font-size: 0.8em; color: #888; margin-bottom: 4px; }
-        .stat-box .value {
-            font-size: 1.7em;
-            font-weight: 800;
-            color: #333;
-        }
-        .stat-box .value.positive { color: #10b981; }
-        .stat-box .value.negative { color: #ef4444; }
+  .btn-launch {
+    width: 100%; padding: 16px;
+    background: linear-gradient(135deg, #7c3aed, #4f46e5);
+    color: white; border: none; border-radius: 14px;
+    font-size: 1.1rem; font-weight: 700; cursor: pointer;
+    transition: opacity 0.2s, transform 0.1s;
+    margin-top: 4px;
+  }
+  .btn-launch:hover:not(:disabled) { opacity: 0.9; transform: translateY(-1px); }
+  .btn-launch:disabled { opacity: 0.5; cursor: not-allowed; }
+  .timer-note { text-align: center; font-size: 0.8rem; color: #9ca3af; margin-top: 8px; }
 
-        /* Break-even bar */
-        .breakeven-section { margin-bottom: 20px; }
-        .breakeven-section .label-row {
-            display: flex;
-            justify-content: space-between;
-            font-size: 0.85em;
-            color: #666;
-            margin-bottom: 6px;
-        }
-        .bar-bg {
-            background: #f0f0f0;
-            border-radius: 99px;
-            height: 14px;
-            position: relative;
-            overflow: hidden;
-        }
-        .bar-fill {
-            height: 100%;
-            border-radius: 99px;
-            transition: width 0.8s ease;
-        }
-        .bar-fill.positive { background: #10b981; }
-        .bar-fill.marginal { background: #f59e0b; }
-        .bar-fill.negative { background: #ef4444; }
-        .bar-marker {
-            position: absolute;
-            top: -2px;
-            bottom: -2px;
-            width: 3px;
-            background: #374151;
-            border-radius: 2px;
-        }
-        .bar-marker-label {
-            font-size: 0.75em;
-            color: #374151;
-            text-align: center;
-            margin-top: 4px;
-            font-weight: 600;
-        }
+  /* Loading */
+  .loading {
+    text-align: center; padding: 32px 0; display: none;
+  }
+  .spinner {
+    width: 48px; height: 48px; margin: 0 auto 16px;
+    border: 4px solid #e5e7eb;
+    border-top: 4px solid #7c3aed;
+    border-radius: 50%; animation: spin 0.8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading p { color: #6b7280; font-size: 0.9rem; }
+  .loading .player-loading { font-weight: 700; color: #7c3aed; margin-top: 4px; }
 
-        /* Bets table */
-        .bets-section h3 { color: #667eea; margin-bottom: 12px; font-size: 1em; }
-        .bet-row {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 10px 12px;
-            border-radius: 8px;
-            margin-bottom: 6px;
-            font-size: 0.88em;
-        }
-        .bet-row.won { background: #f0fdf4; }
-        .bet-row.lost { background: #fff5f5; }
-        .bet-info { color: #444; }
-        .bet-date { color: #999; font-size: 0.8em; }
-        .bet-profit { font-weight: 700; }
-        .bet-profit.pos { color: #10b981; }
-        .bet-profit.neg { color: #ef4444; }
+  /* Results */
+  .result-card { display: none; }
 
-        /* Error */
-        .error-card {
-            background: #fee2e2;
-            border: 2px solid #fca5a5;
-            border-radius: 12px;
-            padding: 20px;
-            color: #991b1b;
-            text-align: center;
-            margin-bottom: 16px;
-        }
+  .verdict-box {
+    padding: 20px; border-radius: 16px; text-align: center; margin-bottom: 20px;
+  }
+  .verdict-box.green  { background: #d1fae5; border: 2px solid #10b981; }
+  .verdict-box.yellow { background: #fef3c7; border: 2px solid #f59e0b; }
+  .verdict-box.red    { background: #fee2e2; border: 2px solid #ef4444; }
+  .verdict-box.orange { background: #fff7ed; border: 2px solid #f97316; }
+  .verdict-label { font-size: 1.2rem; font-weight: 800; margin-bottom: 6px; }
+  .verdict-msg   { font-size: 0.85rem; color: #374151; line-height: 1.4; }
 
-        .hidden { display: none; }
-    </style>
+  .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 20px; }
+  .stat-box {
+    background: #f9fafb; border-radius: 14px; padding: 16px; text-align: center;
+  }
+  .stat-label { font-size: 0.75rem; color: #9ca3af; margin-bottom: 6px; font-weight: 500; }
+  .stat-value { font-size: 1.6rem; font-weight: 800; color: #1f2937; }
+  .stat-value.green  { color: #10b981; }
+  .stat-value.red    { color: #ef4444; }
+  .stat-value.orange { color: #f97316; }
+
+  .progress-wrap { margin-bottom: 20px; }
+  .progress-labels { display: flex; justify-content: space-between; font-size: 0.8rem; color: #9ca3af; margin-bottom: 6px; }
+  .progress-bar-bg {
+    background: #e5e7eb; border-radius: 8px; height: 12px; overflow: hidden; position: relative;
+  }
+  .progress-bar-fill {
+    height: 100%; background: linear-gradient(90deg, #10b981, #34d399);
+    border-radius: 8px; transition: width 0.6s ease;
+  }
+  .breakeven-marker {
+    position: absolute; top: 0; bottom: 0; width: 2px; background: #374151;
+  }
+  .breakeven-label {
+    text-align: center; font-size: 0.75rem; color: #6b7280; margin-top: 4px;
+  }
+
+  .skipped-info {
+    background: #f3f4f6; border-radius: 12px; padding: 14px;
+    font-size: 0.8rem; color: #6b7280; margin-bottom: 16px;
+  }
+  .skipped-info strong { color: #374151; }
+
+  .bets-title { font-size: 1rem; font-weight: 700; margin-bottom: 12px; display: flex; align-items: center; gap: 6px; }
+  .bet-item {
+    background: #f9fafb; border-radius: 12px; padding: 14px;
+    margin-bottom: 10px; border-left: 4px solid transparent;
+  }
+  .bet-item.won  { border-left-color: #10b981; background: #f0fdf4; }
+  .bet-item.lost { border-left-color: #ef4444; background: #fef2f2; }
+  .bet-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+  .bet-rec { font-weight: 700; font-size: 0.9rem; }
+  .bet-profit { font-weight: 700; font-size: 0.95rem; }
+  .bet-profit.pos { color: #10b981; }
+  .bet-profit.neg { color: #ef4444; }
+  .bet-details { font-size: 0.78rem; color: #6b7280; }
+  .bet-date    { font-size: 0.72rem; color: #9ca3af; margin-top: 2px; }
+
+  /* Error */
+  .error-box {
+    background: #fee2e2; border: 2px solid #ef4444; border-radius: 16px;
+    padding: 20px; text-align: center; display: none;
+  }
+  .error-box .icon { font-size: 2rem; margin-bottom: 8px; }
+  .error-box p { color: #991b1b; font-size: 0.9rem; font-weight: 500; }
+</style>
 </head>
 <body>
 <div class="container">
 
-    <div class="header">
-        <h1>🔬 Backtest</h1>
-        <a href="index.html" class="btn-back">← Retour</a>
+  <a href="index.html" class="back-btn">← Retour</a>
+
+  <div class="header">
+    <h1>🔬 Backtest Walk-Forward</h1>
+    <p>Validation historique — zéro data leakage</p>
+  </div>
+
+  <!-- FORM CARD -->
+  <div class="card" id="form-card">
+    <h2>⚙️ Paramètres</h2>
+
+    <!-- JOUEUR AVEC AUTOCOMPLETE -->
+    <div class="form-group">
+      <label for="player-input">Joueur NBA</label>
+      <div class="autocomplete-wrapper">
+        <input
+          type="text"
+          id="player-input"
+          placeholder="Tape un nom (ex: Jalen, Curry...)"
+          autocomplete="off"
+          autocorrect="off"
+          autocapitalize="off"
+          spellcheck="false"
+        />
+        <div class="suggestions-list" id="suggestions-list"></div>
+      </div>
     </div>
 
-    <div class="explainer">
-        <strong>Comment ça fonctionne?</strong><br>
-        Le backtest simule tes paris sur une saison passée complète — sans risquer d'argent réel.
-        Pour chaque match historique, il entraîne le modèle sur ce qui s'est passé <em>avant</em>,
-        prédit le résultat, et vérifie si tu aurais gagné.<br><br>
-        <strong>Résultat positif</strong> → ton modèle a un vrai edge, continue à parier.<br>
-        <strong>Résultat négatif</strong> → le modèle est cassé, arrête de parier.
+    <!-- STAT -->
+    <div class="form-group">
+      <label>Statistique</label>
+      <div class="select-wrapper">
+        <select id="stat-type">
+          <option value="points">Points</option>
+          <option value="assists">Assists</option>
+          <option value="rebounds">Rebounds</option>
+          <option value="3pt">3-Pointers</option>
+        </select>
+      </div>
     </div>
 
-    <!-- Formulaire -->
-    <div class="form-card">
-        <h2>⚙️ Paramètres</h2>
-
-        <div class="form-group">
-            <label>Joueur</label>
-            <input type="text" id="player" value="LeBron James" placeholder="ex: Stephen Curry">
-        </div>
-
-        <div class="form-group">
-            <label>Statistique</label>
-            <select id="stat_type">
-                <option value="points">Points</option>
-                <option value="assists">Assists</option>
-                <option value="rebounds">Rebounds</option>
-                <option value="3pt">3-Points</option>
-            </select>
-        </div>
-
-        <div class="form-group">
-            <label>Saison à tester</label>
-            <select id="season">
-                <option value="2023-24">2023-24 (saison complète — recommandé)</option>
-                <option value="2022-23">2022-23</option>
-                <option value="2024-25">2024-25 (en cours — partiel)</option>
-            </select>
-        </div>
-
-        <div class="form-group">
-            <label>Edge minimum pour parier (%)</label>
-            <select id="min_edge">
-                <option value="3">3% (permissif — plus de paris)</option>
-                <option value="5" selected>5% (recommandé)</option>
-                <option value="8">8% (strict — moins de paris)</option>
-                <option value="10">10% (très strict)</option>
-            </select>
-        </div>
-
-        <div class="form-group">
-            <label>Mise par pari (€)</label>
-            <input type="number" id="stake" value="50" min="1" max="500">
-        </div>
-
-        <button class="btn-run" id="btnRun" onclick="runBacktest()">
-            🚀 Lancer le Backtest
-        </button>
-        <p style="text-align:center; color:#999; font-size:0.8em; margin-top:10px;">
-            ⏱️ Durée estimée: 3–8 minutes selon le joueur
-        </p>
+    <!-- SAISON -->
+    <div class="form-group">
+      <label>Saison à tester</label>
+      <div class="select-wrapper">
+        <select id="season">
+          <option value="2024-25">2024-25 (en cours — partiel)</option>
+          <option value="2023-24" selected>2023-24 (saison complète — recommandé)</option>
+          <option value="2022-23">2022-23</option>
+        </select>
+      </div>
     </div>
 
-    <!-- Loading -->
-    <div class="loading hidden" id="loading">
-        <div class="spinner"></div>
-        <h3>Backtest en cours...</h3>
-        <p>Le modèle simule chaque match de la saison.</p>
-        <p>Ne ferme pas cette page.</p>
+    <!-- EDGE -->
+    <div class="form-group">
+      <label>Edge minimum pour parier (%)</label>
+      <div class="select-wrapper">
+        <select id="min-edge">
+          <option value="3">3%</option>
+          <option value="5" selected>5% (recommandé)</option>
+          <option value="10">10%</option>
+          <option value="15">15%</option>
+          <option value="20">20%</option>
+        </select>
+      </div>
     </div>
 
-    <!-- Erreur -->
-    <div class="error-card hidden" id="errorCard">
-        <strong>❌ Erreur</strong><br>
-        <span id="errorMsg"></span>
+    <!-- MISE -->
+    <div class="form-group">
+      <label>Mise par pari (€)</label>
+      <input type="number" class="stake-input" id="stake" value="50" min="1" max="500" />
     </div>
 
-    <!-- Résultats -->
-    <div class="results-card hidden" id="results">
-        <div id="verdictBox" class="verdict"></div>
+    <button class="btn-launch" id="launch-btn" onclick="launchBacktest()" disabled>
+      🚀 Lancer le Backtest
+    </button>
+    <p class="timer-note">⏱ Durée estimée: 3–8 minutes selon le joueur</p>
+  </div>
 
-        <div class="stats-grid">
-            <div class="stat-box">
-                <div class="label">Paris effectués</div>
-                <div class="value" id="totalBets">—</div>
-            </div>
-            <div class="stat-box">
-                <div class="label">Win Rate</div>
-                <div class="value" id="winRate">—</div>
-            </div>
-            <div class="stat-box">
-                <div class="label">Profit total</div>
-                <div class="value" id="profit">—</div>
-            </div>
-            <div class="stat-box">
-                <div class="label">ROI</div>
-                <div class="value" id="roi">—</div>
-            </div>
-            <div class="stat-box">
-                <div class="label">Victoires / Défaites</div>
-                <div class="value" id="record">—</div>
-            </div>
-            <div class="stat-box">
-                <div class="label">Erreur moy. prédiction</div>
-                <div class="value" id="avgError">—</div>
-            </div>
-        </div>
+  <!-- LOADING -->
+  <div class="loading" id="loading">
+    <div class="spinner"></div>
+    <p>Analyse en cours...</p>
+    <p class="player-loading" id="loading-player"></p>
+    <p style="font-size:0.8rem;color:#9ca3af;margin-top:8px;">Walk-forward sur toute la saison</p>
+  </div>
 
-        <!-- Barre break-even -->
-        <div class="breakeven-section">
-            <div class="label-row">
-                <span>Win Rate</span>
-                <span id="breakEvenLabel">Break-even: 52.4%</span>
-            </div>
-            <div class="bar-bg">
-                <div class="bar-fill" id="barFill" style="width:0%"></div>
-                <div class="bar-marker" id="barMarker" style="left:52.4%"></div>
-            </div>
-            <div class="bar-marker-label">▲ Break-even</div>
-        </div>
+  <!-- ERROR -->
+  <div class="error-box" id="error-box">
+    <div class="icon">❌</div>
+    <p id="error-msg"></p>
+  </div>
 
-        <!-- Derniers paris -->
-        <div class="bets-section">
-            <h3>📋 Derniers paris simulés</h3>
-            <div id="betsList"></div>
-        </div>
-    </div>
+  <!-- RESULTS -->
+  <div class="result-card" id="result-card"></div>
 
 </div>
 
 <script>
-    const API_URL = 'https://nba-stats-xcyv.onrender.com';
+const BACKEND = 'https://nba-analyzer-backend.onrender.com';
+let selectedPlayer = '';
+let searchTimeout  = null;
+let selectedIndex  = -1;
 
-    async function runBacktest() {
-        const player = document.getElementById('player').value.trim();
-        const stat_type = document.getElementById('stat_type').value;
-        const season = document.getElementById('season').value;
-        const min_edge = parseFloat(document.getElementById('min_edge').value);
-        const stake = parseFloat(document.getElementById('stake').value);
+// -------------------------------------------------------
+// AUTOCOMPLETE
+// -------------------------------------------------------
 
-        if (!player) {
-            alert('Entre le nom d\'un joueur');
-            return;
-        }
+const playerInput   = document.getElementById('player-input');
+const suggestionBox = document.getElementById('suggestions-list');
+const launchBtn     = document.getElementById('launch-btn');
 
-        // UI
-        document.getElementById('btnRun').disabled = true;
-        document.getElementById('loading').classList.remove('hidden');
-        document.getElementById('results').classList.add('hidden');
-        document.getElementById('errorCard').classList.add('hidden');
+playerInput.addEventListener('input', () => {
+  const q = playerInput.value.trim();
+  selectedPlayer = '';
+  launchBtn.disabled = true;
+  clearTimeout(searchTimeout);
 
-        try {
-            const response = await fetch(`${API_URL}/api/backtest`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ player, stat_type, season, min_edge, stake }),
-                signal: AbortSignal.timeout(600000) // 10 min max
-            });
+  if (q.length < 2) {
+    hideSuggestions();
+    return;
+  }
+  // Debounce 300ms
+  searchTimeout = setTimeout(() => fetchSuggestions(q), 300);
+});
 
-            const data = await response.json();
+playerInput.addEventListener('keydown', (e) => {
+  const items = suggestionBox.querySelectorAll('.suggestion-item');
+  if (!items.length) return;
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    selectedIndex = Math.min(selectedIndex + 1, items.length - 1);
+    updateSelected(items);
+  } else if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    selectedIndex = Math.max(selectedIndex - 1, 0);
+    updateSelected(items);
+  } else if (e.key === 'Enter' && selectedIndex >= 0) {
+    e.preventDefault();
+    items[selectedIndex].click();
+  } else if (e.key === 'Escape') {
+    hideSuggestions();
+  }
+});
 
-            if (data.status === 'ERROR') {
-                showError(data.message);
-            } else if (data.status === 'NO_BETS') {
-                showError(`${data.message} — Essaie de baisser l'edge minimum à 3%.`);
-            } else {
-                showResults(data, stake);
-            }
+document.addEventListener('click', (e) => {
+  if (!e.target.closest('.autocomplete-wrapper')) hideSuggestions();
+});
 
-        } catch (err) {
-            showError(err.name === 'TimeoutError'
-                ? 'Timeout — Render a mis trop de temps. Réessaie dans quelques minutes.'
-                : `Erreur réseau: ${err.message}`);
-        } finally {
-            document.getElementById('loading').classList.add('hidden');
-            document.getElementById('btnRun').disabled = false;
-        }
+function updateSelected(items) {
+  items.forEach((el, i) => el.classList.toggle('selected', i === selectedIndex));
+}
+
+async function fetchSuggestions(q) {
+  suggestionBox.innerHTML = '<div class="searching-indicator">🔍 Recherche...</div>';
+  suggestionBox.classList.add('visible');
+
+  try {
+    const res  = await fetch(`${BACKEND}/api/players/search?q=${encodeURIComponent(q)}`);
+    const data = await res.json();
+    renderSuggestions(data.players || []);
+  } catch (err) {
+    suggestionBox.innerHTML = '<div class="no-results">Erreur de connexion au serveur</div>';
+  }
+}
+
+function renderSuggestions(players) {
+  selectedIndex = -1;
+  if (!players.length) {
+    suggestionBox.innerHTML = '<div class="no-results">Aucun joueur trouvé</div>';
+    return;
+  }
+  suggestionBox.innerHTML = players.map(p => `
+    <div class="suggestion-item" onclick="selectPlayer('${p.name.replace(/'/g, "\\'")}')">
+      <span class="icon">🏀</span>
+      <span class="name">${highlightMatch(p.name, playerInput.value.trim())}</span>
+    </div>
+  `).join('');
+}
+
+function highlightMatch(name, query) {
+  if (!query) return name;
+  const idx = name.toLowerCase().indexOf(query.toLowerCase());
+  if (idx === -1) return name;
+  return name.slice(0, idx)
+    + `<strong>${name.slice(idx, idx + query.length)}</strong>`
+    + name.slice(idx + query.length);
+}
+
+function selectPlayer(name) {
+  selectedPlayer    = name;
+  playerInput.value = name;
+  launchBtn.disabled = false;
+  hideSuggestions();
+}
+
+function hideSuggestions() {
+  suggestionBox.classList.remove('visible');
+  suggestionBox.innerHTML = '';
+  selectedIndex = -1;
+}
+
+// -------------------------------------------------------
+// BACKTEST
+// -------------------------------------------------------
+
+async function launchBacktest() {
+  if (!selectedPlayer) {
+    alert('Sélectionne un joueur dans la liste de suggestions.');
+    return;
+  }
+
+  const statType = document.getElementById('stat-type').value;
+  const season   = document.getElementById('season').value;
+  const minEdge  = parseFloat(document.getElementById('min-edge').value);
+  const stake    = parseFloat(document.getElementById('stake').value);
+
+  document.getElementById('form-card').style.display  = 'none';
+  document.getElementById('loading').style.display    = 'block';
+  document.getElementById('error-box').style.display  = 'none';
+  document.getElementById('result-card').style.display = 'none';
+  document.getElementById('loading-player').textContent = selectedPlayer + ' — ' + statType;
+
+  try {
+    const res  = await fetch(`${BACKEND}/api/backtest`, {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({
+        player: selectedPlayer, stat_type: statType,
+        season, min_edge: minEdge, stake
+      })
+    });
+    const data = await res.json();
+    document.getElementById('loading').style.display = 'none';
+
+    if (data.status === 'ERROR' || data.status === 'NO_BETS') {
+      showError(data.message || 'Erreur inconnue');
+    } else {
+      showResults(data, stake);
     }
+  } catch (err) {
+    document.getElementById('loading').style.display = 'none';
+    showError('Impossible de contacter le serveur. Vérifie ta connexion.');
+  }
+}
 
-    function showError(msg) {
-        document.getElementById('errorMsg').textContent = msg;
-        document.getElementById('errorCard').classList.remove('hidden');
-    }
+function showError(msg) {
+  const box = document.getElementById('error-box');
+  document.getElementById('error-msg').textContent = msg;
+  box.style.display = 'block';
+  document.getElementById('form-card').style.display = 'block';
+}
 
-    function showResults(data, stake) {
-        const BREAK_EVEN = data.break_even || 52.38;
-        const wr = data.win_rate;
-        const roi = data.roi;
-        const profit = data.total_profit;
+function showResults(data, stake) {
+  const rc = document.getElementById('result-card');
+  rc.style.display = 'block';
 
-        // Verdict
-        let verdictClass, verdictTitle, verdictSub;
-        if (wr > BREAK_EVEN + 3) {
-            verdictClass = 'positive';
-            verdictTitle = '✅ Edge détecté — Continue à parier';
-            verdictSub = `Win rate de ${wr}% au-dessus du break-even de ${BREAK_EVEN}%.`;
-        } else if (wr > BREAK_EVEN) {
-            verdictClass = 'marginal';
-            verdictTitle = '⚡ Edge marginal — Prudence';
-            verdictSub = `Légèrement au-dessus du break-even. Teste sur plus de saisons avant de miser fort.`;
-        } else if (data.total_bets < 20) {
-            verdictClass = 'marginal';
-            verdictTitle = '❓ Échantillon trop petit';
-            verdictSub = `Seulement ${data.total_bets} paris qualifiés. Baisse le min_edge à 3% pour plus de données.`;
-        } else {
-            verdictClass = 'negative';
-            verdictTitle = '❌ Pas d\'edge — Arrête de parier';
-            verdictSub = `Win rate de ${wr}% sous le break-even de ${BREAK_EVEN}%. Le modèle perd de l'argent long terme.`;
-        }
+  const wr      = data.win_rate;
+  const profit  = data.total_profit;
+  const roi     = data.roi;
+  const color   = data.verdict_color || 'green';
 
-        document.getElementById('verdictBox').className = `verdict ${verdictClass}`;
-        document.getElementById('verdictBox').innerHTML = `
-            <div class="verdict-title">${verdictTitle}</div>
-            <div class="verdict-sub">${verdictSub}</div>
-        `;
+  // Couleur win rate
+  const wrColor = wr >= 58 ? 'green' : wr >= 52.38 ? 'orange' : 'red';
+  const prColor = profit >= 0 ? 'green' : 'red';
 
-        // Stats
-        const profitSign = profit >= 0 ? '+' : '';
-        const roiSign = roi >= 0 ? '+' : '';
+  // Pourcentage barre (0-100 entre 45% et 70%)
+  const barPct = Math.min(100, Math.max(0, ((wr - 45) / 25) * 100));
+  const bePct  = ((52.38 - 45) / 25) * 100;
 
-        document.getElementById('totalBets').textContent = data.total_bets;
-        document.getElementById('winRate').textContent = `${wr}%`;
-        document.getElementById('winRate').className = `value ${wr > BREAK_EVEN ? 'positive' : 'negative'}`;
+  // Paris skippés
+  const skippedHtml = (data.skipped_dnp || data.skipped_rmse || data.skipped_line_value || data.skipped_sanity) ? `
+    <div class="skipped-info">
+      <strong>Paris filtrés (non comptabilisés):</strong><br>
+      ${data.skipped_dnp       ? `DNP/&lt;20min: <strong>${data.skipped_dnp}</strong> &nbsp;` : ''}
+      ${data.skipped_rmse      ? `RMSE élevé: <strong>${data.skipped_rmse}</strong> &nbsp;` : ''}
+      ${data.skipped_line_value ? `Line value: <strong>${data.skipped_line_value}</strong> &nbsp;` : ''}
+      ${data.skipped_sanity    ? `Sanity check: <strong>${data.skipped_sanity}</strong>` : ''}
+    </div>` : '';
 
-        document.getElementById('profit').textContent = `${profitSign}${profit}€`;
-        document.getElementById('profit').className = `value ${profit >= 0 ? 'positive' : 'negative'}`;
+  // Liste des paris
+  const betsHtml = (data.bets || []).map(b => `
+    <div class="bet-item ${b.won ? 'won' : 'lost'}">
+      <div class="bet-top">
+        <span class="bet-rec">${b.recommendation} ${b.line}</span>
+        <span class="bet-profit ${b.won ? 'pos' : 'neg'}">${b.won ? '+' : ''}${b.profit}€</span>
+      </div>
+      <div class="bet-details">Préd: <strong>${b.prediction}</strong> | Réel: <strong>${b.actual}</strong> | Edge: ${b.edge}% | LV: ${b.line_value}</div>
+      <div class="bet-date">${b.date}</div>
+    </div>`).join('');
 
-        document.getElementById('roi').textContent = `${roiSign}${roi}%`;
-        document.getElementById('roi').className = `value ${roi >= 0 ? 'positive' : 'negative'}`;
+  rc.innerHTML = `
+    <div class="card">
+      <h2>📊 Résultats — ${data.player}</h2>
+      <p style="font-size:0.8rem;color:#9ca3af;margin-top:-12px;margin-bottom:16px;">${data.stat_type} · ${data.season}</p>
 
-        document.getElementById('record').textContent = `${data.wins}W — ${data.losses}L`;
-        document.getElementById('avgError').textContent = `${data.avg_error} pts`;
+      <div class="verdict-box ${color}">
+        <div class="verdict-label">${data.verdict_label}</div>
+        <div class="verdict-msg">${data.verdict_msg}</div>
+      </div>
 
-        // Barre break-even
-        const barPct = Math.min(wr, 80); // Cap à 80% pour la barre
-        const markerPct = Math.min(BREAK_EVEN, 80);
-        const fillColor = wr > BREAK_EVEN + 3 ? 'positive' : wr > BREAK_EVEN ? 'marginal' : 'negative';
+      <div class="stats-grid">
+        <div class="stat-box">
+          <div class="stat-label">Paris effectués</div>
+          <div class="stat-value">${data.total_bets}</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Win Rate</div>
+          <div class="stat-value ${wrColor}">${wr}%</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Profit total</div>
+          <div class="stat-value ${prColor}">${profit >= 0 ? '+' : ''}${profit}€</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">ROI</div>
+          <div class="stat-value ${prColor}">${roi >= 0 ? '+' : ''}${roi}%</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Victoires / Défaites</div>
+          <div class="stat-value">${data.wins}W — ${data.losses}L</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Erreur moy. prédiction</div>
+          <div class="stat-value">${data.avg_error} pts</div>
+        </div>
+      </div>
 
-        document.getElementById('barFill').style.width = `${(barPct / 80) * 100}%`;
-        document.getElementById('barFill').className = `bar-fill ${fillColor}`;
-        document.getElementById('barMarker').style.left = `${(markerPct / 80) * 100}%`;
-        document.getElementById('breakEvenLabel').textContent = `Break-even: ${BREAK_EVEN}%`;
+      <div class="progress-wrap">
+        <div class="progress-labels">
+          <span>Win Rate</span>
+          <span>Break-even: ${data.break_even}%</span>
+        </div>
+        <div class="progress-bar-bg">
+          <div class="progress-bar-fill" style="width:${barPct}%"></div>
+          <div class="breakeven-marker" style="left:${bePct}%"></div>
+        </div>
+        <div class="breakeven-label">▲ Break-even</div>
+      </div>
 
-        // Derniers paris
-        const betsHtml = (data.bets || []).reverse().map(bet => `
-            <div class="bet-row ${bet.won ? 'won' : 'lost'}">
-                <div>
-                    <div class="bet-info">
-                        ${bet.recommendation} ${bet.line} 
-                        | Préd: <strong>${bet.prediction}</strong> 
-                        | Réel: <strong>${bet.actual}</strong>
-                        | Edge: ${bet.edge}%
-                    </div>
-                    <div class="bet-date">${bet.date}</div>
-                </div>
-                <div class="bet-profit ${bet.won ? 'pos' : 'neg'}">
-                    ${bet.won ? '+' : ''}${bet.profit}€
-                </div>
-            </div>
-        `).join('');
+      ${skippedHtml}
 
-        document.getElementById('betsList').innerHTML = betsHtml || '<p style="color:#999">Aucun pari</p>';
+      <div class="bets-title">📋 Derniers paris simulés</div>
+      ${betsHtml}
 
-        document.getElementById('results').classList.remove('hidden');
-        document.getElementById('results').scrollIntoView({ behavior: 'smooth' });
-    }
+      <button onclick="resetForm()" style="
+        width:100%;margin-top:16px;padding:14px;background:#f3f4f6;
+        border:none;border-radius:12px;font-size:0.95rem;font-weight:600;
+        color:#374151;cursor:pointer;">
+        ← Nouveau backtest
+      </button>
+    </div>`;
+}
+
+function resetForm() {
+  document.getElementById('result-card').style.display = 'none';
+  document.getElementById('error-box').style.display   = 'none';
+  document.getElementById('form-card').style.display   = 'block';
+  playerInput.value = '';
+  selectedPlayer    = '';
+  launchBtn.disabled = true;
+}
 </script>
 </body>
 </html>
