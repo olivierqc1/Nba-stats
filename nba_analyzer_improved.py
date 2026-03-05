@@ -86,10 +86,18 @@ def analyze_with_xgboost(player, opponent, is_home, stat_type, line):
     ci         = pred_result['confidence_interval']
     ci['lower'] = max(ci['lower'], 0)                 # CI jamais négatif
 
-    # SANITY CHECK: prédiction < 50% ou > 200% de la ligne = modèle déréglé
+    # SANITY CHECK: prédiction trop loin de la ligne = modèle déréglé
+    # Seuils plus larges pour assists/rebounds/3pt (lignes à faible valeur absolue)
     if line and line > 0:
         pred_ratio = prediction / line
-        if pred_ratio < 0.50 or pred_ratio > 2.00:
+        ratio_ranges = {
+            'points':   (0.50, 2.00),
+            'assists':  (0.30, 2.50),
+            'rebounds': (0.30, 2.50),
+            '3pt':      (0.20, 3.00),
+        }
+        ratio_min, ratio_max = ratio_ranges.get(stat_type, (0.50, 2.00))
+        if pred_ratio < ratio_min or pred_ratio > ratio_max:
             return {
                 'status': 'ERROR',
                 'error':  f'Modèle invalide: prédiction {prediction} trop loin de la ligne {line} (ratio {round(pred_ratio,2)}). Données insuffisantes.'
@@ -204,8 +212,12 @@ def scan_by_type(stat_type, limit=25):
                 lv         = abs(result['line_analysis'].get('line_value_score', 0))
                 rmse_ratio = (rmse / line) if line and line > 0 else 1.0
 
-                # Filtre RMSE/ligne > 40%: modele trop imprécis pour ce joueur/ligne
-                if rec == 'SKIP' or edge < min_edge or r2 < min_r2 or overfit > 0.35 or lv < min_line_value or rmse_ratio > 0.40:
+                # Seuil RMSE adapté par stat — assists/rebounds ont des lignes basses
+                # donc le ratio est naturellement plus élevé même avec un bon modèle
+                rmse_limits = {'points': 0.40, 'assists': 0.65, 'rebounds': 0.60, '3pt': 0.80}
+                max_rmse = rmse_limits.get(stat_type, 0.50)
+
+                if rec == 'SKIP' or edge < min_edge or r2 < min_r2 or overfit > 0.35 or lv < min_line_value or rmse_ratio > max_rmse:
                     continue
 
                 result['regression_stats']['rmse_ratio'] = round(rmse_ratio, 2)
@@ -222,6 +234,7 @@ def scan_by_type(stat_type, limit=25):
             'total_available': len(props), 'total_analyzed': analyzed_count,
             'opportunities_found': len(opportunities),
             'scan_time': datetime.now().isoformat(),
+
             'filters': {'min_edge': min_edge, 'min_r2': min_r2, 'min_line_value': min_line_value},
             'opportunities': opportunities
         })
@@ -233,7 +246,6 @@ def scan_by_type(stat_type, limit=25):
 # ------------------------------------------------------------------
 # PLAYER HISTORY
 # ------------------------------------------------------------------
-
 
 @app.route('/api/player-history/<player_name>', methods=['GET'])
 def get_player_history(player_name):
