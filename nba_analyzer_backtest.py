@@ -198,11 +198,9 @@ def _run_walkforward(player_name, stat_type, season, min_edge, stake, collector)
             skipped_rmse += 1
             continue
 
-        # FILTRE CI WIDTH — intervalle trop large = modèle incertain
-        ci_width = 2 * 1.96 * max(train_rmse, 2.0)
-        if ci_width > MAX_CI_WIDTH:
-            skipped_rmse += 1
-            continue
+        # NOTE: CI width filtré uniquement en LIVE (scan) — en backtest le RMSE
+        # est naturellement plus élevé (fenêtres de 20-30 matchs seulement)
+        # donc le filtre CI width supprimerait presque tous les bets walk-forward.
 
         # NOTE: line_value NON appliqué en backtest — les lignes sont simulées
         # à partir de la moyenne récente, donc line_value serait circulaire.
