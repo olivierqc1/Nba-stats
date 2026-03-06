@@ -86,6 +86,16 @@ def analyze_with_xgboost(player, opponent, is_home, stat_type, line):
     ci         = pred_result['confidence_interval']
     ci['lower'] = max(ci['lower'], 0)                 # CI jamais négatif
 
+    # FILTRE CI WIDTH — intervalle trop large = modèle incertain (ex: Coby White 1.1-16.9)
+    ci_width = ci['upper'] - ci['lower']
+    ci_width_limits = {'points': 12.0, 'assists': 8.0, 'rebounds': 8.0, '3pt': 5.0}
+    max_ci = ci_width_limits.get(stat_type, 12.0)
+    if ci_width > max_ci:
+        return {
+            'status': 'ERROR',
+            'error':  f'Modèle trop incertain: CI {ci["lower"]}-{ci["upper"]} ({round(ci_width,1)} pts de large, max {max_ci})'
+        }
+
     # SANITY CHECK: prédiction trop loin de la ligne = modèle déréglé
     # Seuils plus larges pour assists/rebounds/3pt (lignes à faible valeur absolue)
     if line and line > 0:
@@ -224,6 +234,7 @@ def scan_by_type(stat_type, limit=25):
                 result['game_info']      = {'date': prop.get('date',''), 'home_team': prop.get('home_team',''), 'away_team': prop.get('away_team','')}
                 result['bookmaker_info'] = {'bookmaker': prop.get('bookmaker','Unknown'), 'line': line, 'over_odds': prop.get('over_odds',-110), 'under_odds': prop.get('under_odds',-110)}
                 opportunities.append(result)
+
             except Exception as e:
                 print(f"ERROR {player}: {e}")
 
@@ -234,7 +245,6 @@ def scan_by_type(stat_type, limit=25):
             'total_available': len(props), 'total_analyzed': analyzed_count,
             'opportunities_found': len(opportunities),
             'scan_time': datetime.now().isoformat(),
-
             'filters': {'min_edge': min_edge, 'min_r2': min_r2, 'min_line_value': min_line_value},
             'opportunities': opportunities
         })
