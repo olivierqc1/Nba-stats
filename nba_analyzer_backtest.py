@@ -20,10 +20,11 @@ ODDS             = -110
 MIN_TRAIN        = 20
 MIN_BETS_VERDICT = 30
 LINE_VALUE_MIN   = 0.2
-MAX_RMSE_RATIO   = 0.40
-# Sanity check: si prédiction < X% de la ligne → modèle déréglé pour ce joueur
-PRED_LINE_RATIO_MIN = 0.50   # prédiction doit être >= 50% de la ligne
-PRED_LINE_RATIO_MAX = 2.00   # prédiction doit être <= 200% de la ligne
+MAX_RMSE_RATIO   = 0.40          # pour points — adapté par stat_type dans le code
+MAX_CI_WIDTH     = 12.0          # CI trop large = modèle incertain → skip
+# Sanity check: si prédiction trop loin de la ligne → modèle déréglé
+PRED_LINE_RATIO_MIN = 0.30       # élargi pour assists/rebounds
+PRED_LINE_RATIO_MAX = 2.50       # élargi pour assists/rebounds
 
 FEATURE_SETS = {
     'points': [
@@ -152,6 +153,7 @@ def _run_walkforward(player_name, stat_type, season, min_edge, stake, collector)
             skipped_dnp += 1
             continue
 
+
         # FILTRE MIN < 20 min
         if 'MIN' in df.columns and float(df.iloc[i].get('MIN', 30)) < 20:
             skipped_dnp += 1
@@ -189,8 +191,16 @@ def _run_walkforward(player_name, stat_type, season, min_edge, stake, collector)
         prediction = max(prediction, 0)  # jamais négatif
         all_errors.append(abs(actual - prediction))
 
-        # FILTRE RMSE/ligne > 40%
-        if line > 0 and (train_rmse / line) > MAX_RMSE_RATIO:
+        # FILTRE RMSE/ligne — seuil adapté par stat_type
+        rmse_limits = {'points': 0.40, 'assists': 0.65, 'rebounds': 0.60, '3pt': 0.80}
+        max_rmse = rmse_limits.get(stat_type, 0.50)
+        if line > 0 and (train_rmse / line) > max_rmse:
+            skipped_rmse += 1
+            continue
+
+        # FILTRE CI WIDTH — intervalle trop large = modèle incertain
+        ci_width = 2 * 1.96 * max(train_rmse, 2.0)
+        if ci_width > MAX_CI_WIDTH:
             skipped_rmse += 1
             continue
 
