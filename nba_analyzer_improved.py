@@ -71,7 +71,40 @@ def analyze_betting_line(prediction, confidence_interval, line):
     }
 
 
+MIN_NBA_SEASONS = 2  # Minimum de saisons NBA complètes requises
+
+def _get_player_season_count(player_name):
+    """Retourne le nombre de saisons NBA (saison régulière) du joueur. 0 si inconnu."""
+    try:
+        from nba_api.stats.static import players as nba_players_static
+        from nba_api.stats.endpoints import playercareerstats
+        import time as _t
+        all_p = nba_players_static.get_active_players()
+        tokens = player_name.lower().split()
+        match = [p for p in all_p if all(t in p['full_name'].lower() for t in tokens)]
+        if not match:
+            match = [p for p in all_p if p['full_name'].lower() == player_name.lower()]
+        if not match:
+            return 99  # Inconnu → on laisse passer
+        pid = match[0]['id']
+        career = playercareerstats.PlayerCareerStats(player_id=pid, per_mode36='PerGame')
+        _t.sleep(0.4)
+        df_reg = career.get_data_frames()[0]  # Regular season
+        # Compte les saisons avec au moins 10 matchs
+        seasons = df_reg[df_reg['GP'] >= 10]
+        return len(seasons)
+    except Exception:
+        return 99  # En cas d'erreur → on laisse passer
+
 def analyze_with_xgboost(player, opponent, is_home, stat_type, line):
+    # FILTRE ANCIENNETÉ — rookies et 2e année exclus (données insuffisantes → overfitting)
+    season_count = _get_player_season_count(player)
+    if season_count < MIN_NBA_SEASONS:
+        return {
+            'status': 'ERROR',
+            'error':  f'Données insuffisantes: {season_count} saison(s) NBA (minimum {MIN_NBA_SEASONS} requises). Modèle non fiable pour les rookies/2e année.'
+        }
+
     features = collector.prepare_features_for_prediction(player, opponent, is_home)
     if features is None:
         return {'status': 'ERROR', 'error': 'Unable to collect data'}
@@ -204,11 +237,61 @@ def scan_by_type(stat_type, limit=25):
         opportunities  = []
         analyzed_count = 0
 
+        # Cache des équipes par joueur (chargé une fois par scan)
+        _player_team_cache = {}
+        try:
+            from nba_api.stats.static import players as _nba_players
+            from nba_api.stats.endpoints import commonplayerinfo as _cpi
+            import time as _time
+        except Exception:
+            _nba_players = None
+
+        def _get_player_team(player_name):
+            """Retourne l'abréviation de l'équipe actuelle du joueur (cache local)."""
+            if player_name in _player_team_cache:
+                return _player_team_cache[player_name]
+            try:
+                if _nba_players is None:
+                    return None
+                all_p = _nba_players.get_active_players()
+                match = [p for p in all_p if p['full_name'].lower() == player_name.lower()]
+                if not match:
+                    tokens = player_name.lower().split()
+                    match = [p for p in all_p if all(t in p['full_name'].lower() for t in tokens)]
+                if not match:
+                    return None
+                pid  = match[0]['id']
+                info = _cpi.CommonPlayerInfo(player_id=pid)
+                _time.sleep(0.3)
+                df_info = info.get_data_frames()[0]
+                team_abbr = str(df_info['TEAM_ABBREVIATION'].iloc[0]).strip()
+                _player_team_cache[player_name] = team_abbr
+                return team_abbr
+            except Exception:
+                return None
+
         for prop in props[:limit]:
             player   = prop.get('player', 'Unknown')
             line     = prop.get('line', 0)
-            opponent = prop.get('away_team', 'Unknown')
-            is_home  = bool(prop.get('home_team'))
+            home_team = prop.get('home_team', '')
+            away_team = prop.get('away_team', '')
+
+            # VALIDATION ÉQUIPE — vérifie que le joueur joue bien dans ce match
+            player_team = _get_player_team(player)
+            if player_team and home_team and away_team:
+                # Vérifie si l'équipe du joueur apparaît dans les équipes du match
+                team_in_match = (
+                    player_team.upper() in home_team.upper() or
+                    player_team.upper() in away_team.upper() or
+                    home_team.upper() in player_team.upper() or
+                    away_team.upper() in player_team.upper()
+                )
+                if not team_in_match:
+                    print(f"   SKIP {player} ({player_team}) — équipe absente du match {away_team}@{home_team}")
+                    continue
+
+            opponent = away_team if home_team else 'Unknown'
+            is_home  = bool(home_team)
             try:
                 result = analyze_with_xgboost(player, opponent, is_home, stat_type, line)
                 analyzed_count += 1
@@ -230,11 +313,11 @@ def scan_by_type(stat_type, limit=25):
                 if rec == 'SKIP' or edge < min_edge or r2 < min_r2 or overfit > 0.35 or lv < min_line_value or rmse_ratio > max_rmse:
                     continue
 
+
                 result['regression_stats']['rmse_ratio'] = round(rmse_ratio, 2)
                 result['game_info']      = {'date': prop.get('date',''), 'home_team': prop.get('home_team',''), 'away_team': prop.get('away_team','')}
                 result['bookmaker_info'] = {'bookmaker': prop.get('bookmaker','Unknown'), 'line': line, 'over_odds': prop.get('over_odds',-110), 'under_odds': prop.get('under_odds',-110)}
                 opportunities.append(result)
-
             except Exception as e:
                 print(f"ERROR {player}: {e}")
 
