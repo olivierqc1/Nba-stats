@@ -238,6 +238,35 @@ def scan_by_type(stat_type, limit=25):
         analyzed_count = 0
 
         # Cache des équipes par joueur (chargé une fois par scan)
+        # Mapping abréviations NBA → mots-clés du nom complet (pour matching)
+        NBA_TEAM_KEYWORDS = {
+            'ATL': ['atlanta', 'hawks'], 'BOS': ['boston', 'celtics'],
+            'BKN': ['brooklyn', 'nets'], 'CHA': ['charlotte', 'hornets'],
+            'CHI': ['chicago', 'bulls'], 'CLE': ['cleveland', 'cavaliers', 'cavs'],
+            'DAL': ['dallas', 'mavericks', 'mavs'], 'DEN': ['denver', 'nuggets'],
+            'DET': ['detroit', 'pistons'], 'GSW': ['golden state', 'warriors'],
+            'HOU': ['houston', 'rockets'], 'IND': ['indiana', 'pacers'],
+            'LAC': ['clippers', 'la clippers', 'los angeles clippers'],
+            'LAL': ['lakers', 'la lakers', 'los angeles lakers'],
+            'MEM': ['memphis', 'grizzlies'], 'MIA': ['miami', 'heat'],
+            'MIL': ['milwaukee', 'bucks'], 'MIN': ['minnesota', 'timberwolves'],
+            'NOP': ['new orleans', 'pelicans'], 'NYK': ['new york', 'knicks'],
+            'OKC': ['oklahoma', 'thunder'], 'ORL': ['orlando', 'magic'],
+            'PHI': ['philadelphia', '76ers', 'sixers'],
+            'PHX': ['phoenix', 'suns'], 'POR': ['portland', 'trail blazers', 'blazers'],
+            'SAC': ['sacramento', 'kings'], 'SAS': ['san antonio', 'spurs'],
+            'TOR': ['toronto', 'raptors'], 'UTA': ['utah', 'jazz'],
+            'WAS': ['washington', 'wizards'],
+        }
+
+        def _team_abbr_matches_name(abbr, full_name):
+            """Vérifie si une abréviation NBA correspond à un nom complet d'équipe."""
+            if not abbr or not full_name:
+                return False
+            full_lower = full_name.lower()
+            keywords = NBA_TEAM_KEYWORDS.get(abbr.upper(), [])
+            return any(kw in full_lower for kw in keywords)
+
         _player_team_cache = {}
         try:
             from nba_api.stats.static import players as _nba_players
@@ -271,27 +300,27 @@ def scan_by_type(stat_type, limit=25):
                 return None
 
         for prop in props[:limit]:
-            player   = prop.get('player', 'Unknown')
-            line     = prop.get('line', 0)
+            player    = prop.get('player', 'Unknown')
+            line      = prop.get('line', 0)
             home_team = prop.get('home_team', '')
             away_team = prop.get('away_team', '')
 
             # VALIDATION ÉQUIPE — vérifie que le joueur joue bien dans ce match
+            # et corrige is_home/opponent selon l'équipe réelle du joueur
             player_team = _get_player_team(player)
             if player_team and home_team and away_team:
-                # Vérifie si l'équipe du joueur apparaît dans les équipes du match
-                team_in_match = (
-                    player_team.upper() in home_team.upper() or
-                    player_team.upper() in away_team.upper() or
-                    home_team.upper() in player_team.upper() or
-                    away_team.upper() in player_team.upper()
-                )
-                if not team_in_match:
-                    print(f"   SKIP {player} ({player_team}) — équipe absente du match {away_team}@{home_team}")
+                on_home  = _team_abbr_matches_name(player_team, home_team)
+                on_away  = _team_abbr_matches_name(player_team, away_team)
+                if not on_home and not on_away:
+                    print(f"   SKIP {player} ({player_team}) — absent du match {away_team}@{home_team}")
                     continue
+                # Corrige is_home et opponent selon l'équipe réelle du joueur
+                is_home  = on_home
+                opponent = away_team if on_home else home_team
+            else:
 
-            opponent = away_team if home_team else 'Unknown'
-            is_home  = bool(home_team)
+                opponent = away_team if home_team else 'Unknown'
+                is_home  = bool(home_team)
             try:
                 result = analyze_with_xgboost(player, opponent, is_home, stat_type, line)
                 analyzed_count += 1
@@ -312,7 +341,6 @@ def scan_by_type(stat_type, limit=25):
 
                 if rec == 'SKIP' or edge < min_edge or r2 < min_r2 or overfit > 0.35 or lv < min_line_value or rmse_ratio > max_rmse:
                     continue
-
 
                 result['regression_stats']['rmse_ratio'] = round(rmse_ratio, 2)
                 result['game_info']      = {'date': prop.get('date',''), 'home_team': prop.get('home_team',''), 'away_team': prop.get('away_team','')}
@@ -616,4 +644,3 @@ if __name__ == '__main__':
     print(f"Port: {port}")
     print("="*55 + "\n")
     app.run(host='0.0.0.0', port=port, debug=debug)
- 
