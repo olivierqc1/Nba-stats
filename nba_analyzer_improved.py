@@ -318,7 +318,6 @@ def scan_by_type(stat_type, limit=25):
                 is_home  = on_home
                 opponent = away_team if on_home else home_team
             else:
-
                 opponent = away_team if home_team else 'Unknown'
                 is_home  = bool(home_team)
             try:
@@ -359,7 +358,7 @@ def scan_by_type(stat_type, limit=25):
             'filters': {'min_edge': min_edge, 'min_r2': min_r2, 'min_line_value': min_line_value},
             'opportunities': opportunities
         })
-    except Exception as e:
+except Exception as e:
         import traceback; traceback.print_exc()
         return jsonify({'status': 'ERROR', 'message': str(e)}), 500
 
@@ -454,6 +453,64 @@ def search_players():
 
 CACHE_FILE = 'backtest_cache.json'
 
+# ── GitHub cache sync ────────────────────────────────────────
+# Variables d'env requises sur Render:
+#   GITHUB_TOKEN  → token avec permission "Contents: Read & Write"
+#   GITHUB_REPO   → "ton-username/Nba-betting"
+#   GITHUB_BRANCH → "main" (optionnel, défaut: main)
+
+import base64, threading as _threading
+
+_github_lock = _threading.Lock()
+
+def _github_push_cache(cache_dict):
+    """
+    Push backtest_cache.json vers GitHub via l'API REST.
+    Appelé en arrière-plan pour ne pas bloquer la réponse HTTP.
+    """
+    token  = os.environ.get('GITHUB_TOKEN')
+    repo   = os.environ.get('GITHUB_REPO')        # ex: "ivierqc1/Nba-betting"
+    branch = os.environ.get('GITHUB_BRANCH', 'main')
+    if not token or not repo:
+        return  # Variables non configurées → skip silencieux
+
+    import requests as _req
+    url     = f'https://api.github.com/repos/{repo}/contents/{CACHE_FILE}'
+    headers = {
+        'Authorization': f'token {token}',
+        'Accept':        'application/vnd.github.v3+json'
+    }
+
+    # 1. Récupère le SHA actuel du fichier (nécessaire pour le PUT)
+    try:
+        r = _req.get(url, headers=headers, params={'ref': branch}, timeout=10)
+        sha = r.json().get('sha') if r.status_code == 200 else None
+    except Exception as e:
+        print(f"GitHub GET sha failed: {e}")
+        return
+
+    # 2. Encode le contenu en base64
+    content_bytes = json.dumps(cache_dict, indent=2, ensure_ascii=False).encode('utf-8')
+    content_b64   = base64.b64encode(content_bytes).decode('utf-8')
+
+    # 3. PUT pour créer/mettre à jour le fichier
+    payload = {
+        'message': f'chore: update backtest cache [{datetime.utcnow().strftime("%Y-%m-%dT%H:%M")}]',
+        'content': content_b64,
+        'branch':  branch,
+    }
+    if sha:
+        payload['sha'] = sha
+
+    try:
+        r = _req.put(url, headers=headers, json=payload, timeout=15)
+        if r.status_code in (200, 201):
+            print(f"✅ GitHub cache updated ({len(cache_dict)} joueurs)")
+        else:
+            print(f"GitHub PUT failed {r.status_code}: {r.text[:200]}")
+    except Exception as e:
+        print(f"GitHub PUT error: {e}")
+
 # ── Jobs asynchrones ─────────────────────────────────────────
 # Stocke les jobs en mémoire: { job_id: { status, result } }
 _jobs = {}
@@ -538,6 +595,7 @@ def backtest_status(job_id):
 
 
 def _load_cache():
+    """Charge le cache depuis le fichier local (inclus dans le repo GitHub)."""
     try:
         if os.path.exists(CACHE_FILE):
             with open(CACHE_FILE, 'r') as f:
@@ -547,11 +605,20 @@ def _load_cache():
     return {}
 
 def _save_cache(cache):
+    """
+    1. Écrit le cache localement.
+    2. Lance un thread pour pusher sur GitHub (non-bloquant).
+    """
+    # Écrit en local d'abord
     try:
         with open(CACHE_FILE, 'w') as f:
             json.dump(cache, f, indent=2)
     except Exception as e:
         print(f"Cache write error: {e}")
+
+    # Push GitHub en arrière-plan
+    t = _threading.Thread(target=_github_push_cache, args=(cache,), daemon=True)
+    t.start()
 
 @app.route('/api/backtest-cache', methods=['GET'])
 def get_backtest_cache():
